@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>한영고등학교 체육부</title>
+  
+  <!-- 차트 및 엑셀 라이브러리 -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+  <style>
+    /* 통합 CSS 디자인 영역 */
+    @import url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_two@1.0/NanumSquareRound.woff');
+
+    body { font-family: 'NanumSquareRound', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; background-color: #f0f2f5; margin: 0; }
+    * { box-sizing: border-box; }
+    
+    .hero { background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); color: white; padding: 0; }
+    
+    .header-top { display: flex; justify-content: center; align-items: center; padding: 15px 20px; max-width: 900px; margin: 0 auto; position: relative; }
+    .header-title-group { display: flex; align-items: center; gap: 12px; }
+    .header-title-group h1 { margin: 0; font-size: 1.5em; letter-spacing: -0.5px; }
+    .school-logo { width: 44px; height: 44px; border-radius: 50%; background: white; padding: 3px; object-fit: contain; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+    
+    .logout-btn { position: absolute; right: 20px; background: transparent; color: white; border: 1px solid rgba(255,255,255,0.5); padding: 6px 15px; border-radius: 4px; cursor: pointer; font-size: 0.85em; font-weight: bold; }
+    .logout-btn:hover { background: rgba(255,255,255,0.2); border-color: white; }
+    
+    .nav-menu { display: flex; flex-wrap: wrap; justify-content: flex-start; background: rgba(0, 0, 0, 0.15); padding: 0 20px; max-width: 900px; margin: 0 auto; overflow-x: visible; }
+    .nav-btn { background: transparent; color: rgba(255,255,255,0.7); border: none; padding: 15px 18px; cursor: pointer; font-weight: bold; font-size: 1em; border-radius: 0; transition: all 0.2s; white-space: nowrap; }
+    .nav-btn:hover { color: white; background: rgba(255,255,255,0.1); }
+    .nav-btn.active { background: #f0f2f5; color: #1e3c72; }
+
+    #tab-pe-teacher { margin-left: auto; }
+
+    .pe-hero { background: linear-gradient(135deg, #ab7b66 0%, #cf9c86 100%); color: white; padding: 0; }
+    .pe-nav-menu { display: flex; flex-wrap: wrap; justify-content: flex-start; background: rgba(0, 0, 0, 0.25); padding: 0 20px; max-width: 900px; margin: 0 auto; overflow-x: visible; }
+    .pe-nav-btn { background: transparent; color: rgba(255,255,255,0.8); border: none; padding: 15px 18px; cursor: pointer; font-weight: bold; font-size: 1em; border-radius: 0; transition: all 0.2s; white-space: nowrap; font-family: 'NanumSquareRound', sans-serif; }
+    .pe-nav-btn:hover { color: white; background: rgba(255,255,255,0.15); }
+    .pe-nav-btn.active { background: #f0f2f5; color: #8c564b; }
+
+    .dropdown { position: relative; display: inline-block; }
+    .dropdown-content { display: none; position: absolute; background-color: white; box-shadow: 0 4px 15px rgba(0,0,0,0.15); z-index: 10; border-radius: 8px; overflow: hidden; top: 100%; left: 0; white-space: nowrap; flex-direction: row; }
+    .dropdown-content button { color: #333; padding: 15px 22px; text-decoration: none; display: inline-block; border: none; background: transparent; text-align: center; cursor: pointer; font-family: 'NanumSquareRound', sans-serif; font-weight: bold; font-size: 0.95em; transition: 0.2s; }
+    .dropdown-content button:hover { background-color: #f0f2f5; color: #1e3c72; }
+    
+    .dropdown:hover .dropdown-content { display: flex; animation: fadeIn 0.2s; }
+    .dropdown:hover .nav-btn { color: white; background: rgba(255,255,255,0.1); }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+
+    .container { padding: 20px; max-width: 900px; margin: auto; }
+    
+    .custom-modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; justify-content: center; align-items: center; z-index: 9999; }
+    .custom-modal-box { background: white; padding: 25px; border-radius: 12px; max-width: 300px; width: 85%; text-align: center; box-shadow: 0 5px 15px rgba(0,0,0,0.2); animation: popIn 0.3s ease-out; }
+    .custom-modal-text { margin-bottom: 20px; font-size: 1.05em; color: #333; line-height: 1.5; word-break: keep-all; }
+    .custom-modal-btn { background: #1e3c72; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-size: 1em; font-weight: bold; cursor: pointer; width: 100%; }
+    @keyframes popIn { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+    .box-ui { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); margin-top: 20px; }
+    .role-selector { display: flex; justify-content: space-between; margin-bottom: 20px; }
+    .role-selector label { background: #f0f2f5; padding: 10px; border-radius: 8px; flex: 1; text-align: center; margin: 0 5px; cursor: pointer; border: 2px solid transparent; }
+    .role-selector input[type="radio"] { display: none; }
+    .role-selector input[type="radio"]:checked + label { border-color: #1e3c72; background: #e8f0fe; color: #1e3c72; font-weight: bold; }
+    .input-field { width: 100%; padding: 12px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 8px; font-size: 1.05em; font-family: 'NanumSquareRound', sans-serif; }
+    .input-group { display: flex; gap: 10px; margin-bottom: 10px; }
+    
+    .btn-primary { width: 100%; padding: 15px; background: #1e3c72; color: white; border: none; border-radius: 8px; font-size: 1.1em; font-weight: bold; cursor: pointer; margin-top:10px; font-family: 'NanumSquareRound', sans-serif; transition: 0.3s; }
+    .btn-primary:disabled { background: #a0aabf; cursor: not-allowed; }
+    .btn-secondary { width: 100%; padding: 15px; background: #f0f2f5; color: #333; border: none; border-radius: 8px; font-size: 1.1em; cursor: pointer; margin-top:10px; font-family: 'NanumSquareRound', sans-serif; }
+    .btn-small { padding: 12px; background: #4caf50; color: white; border: none; border-radius: 8px; cursor: pointer; white-space: nowrap; font-weight:bold; font-family: 'NanumSquareRound', sans-serif; transition: 0.3s; }
+    .btn-small:disabled { background: #9ece9f; cursor: not-allowed; }
+    
+    .pw-match { color: green; font-size: 0.9em; display: none; margin-top:-5px; margin-bottom:10px; }
+    .pw-mismatch { color: red; font-size: 0.9em; display: none; margin-top:-5px; margin-bottom:10px; }
+    .card { background: white; border-radius: 12px; padding: 20px; margin-bottom: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+    .hidden { display: none !important; }
+
+    /* 세로형 토너먼트 라인 그리기 CSS */
+    .bracket-line-v { width: 2px; background-color: #ff9800; margin: 0 auto; }
+    .bracket-line-h { height: 2px; background-color: #ff9800; }
+    .bracket-box { background: white; border: 2px solid #ff9800; border-radius: 6px; padding: 10px; text-align: center; box-shadow: 2px 2px 5px rgba(0,0,0,0.05); font-weight: bold; color: #e65100; font-size: 1.1em; width: 100px; display: inline-block; }
+  </style>
+</head>
+<body>
+
+  <!-- 통합 로그인 뷰 -->
+  <div id="login-view" class="container">
+    <div style="text-align:center; margin-bottom: 30px;">
+      <img src="https://lh3.googleusercontent.com/d/19-2im0ZDmLGk7YWgcPgTQscBnS-0tRTs" alt="학교 로고" style="width:80px; margin-bottom:15px;">
+      <h1 style="color:#1e3c72; margin:0;">한영고등학교 체육부</h1>
+      <p style="color:#666;">통합 관리 시스템 로그인</p>
+    </div>
+    
+    <div class="box-ui">
+      <div class="role-selector">
+        <input type="radio" id="login-student" name="login-role" value="학생" checked>
+        <label for="login-student">🧑‍🎓 학생</label>
+        <input type="radio" id="login-teacher" name="login-role" value="교사">
+        <label for="login-teacher">👨‍🏫 일반교사</label>
+        <input type="radio" id="login-pe-teacher" name="login-role" value="체육교사">
+        <label for="login-pe-teacher">🏅 체육교사</label>
+      </div>
+      <input type="text" id="login-id" class="input-field" placeholder="아이디 (학생: 학번 / 교사: 이름)">
+      <input type="password" id="login-pw" class="input-field" placeholder="비밀번호">
+      <button class="btn-primary" onclick="attemptLogin()">로그인</button>
+      <button class="btn-secondary" onclick="toggleView('signup-view')">회원가입</button>
+      <div id="login-msg" style="color:red; text-align:center; margin-top:10px; font-weight:bold;"></div>
+    </div>
+  </div>
+
+  <!-- 통합 회원가입 뷰 -->
+  <div id="signup-view" class="container hidden">
+    <h2 style="text-align:center; color:#1e3c72;">회원가입</h2>
+    <div class="box-ui">
+      <div class="role-selector">
+        <input type="radio" id="reg-student" name="reg-role" value="학생" checked onchange="changeSignupForm()">
+        <label for="reg-student">🧑‍🎓 학생</label>
+        <input type="radio" id="reg-teacher" name="reg-role" value="교사" onchange="changeSignupForm()">
+        <label for="reg-teacher">👨‍🏫 일반교사</label>
+        <input type="radio" id="reg-pe-teacher" name="reg-role" value="체육교사" onchange="changeSignupForm()">
+        <label for="reg-pe-teacher">🏅 체육교사</label>
+      </div>
+
+      <div id="signup-student-form">
+        <div class="input-group">
+          <select id="reg-grade" class="input-field" style="margin:0;"><option value="">학년</option><option value="1">1학년</option><option value="2">2학년</option><option value="3">3학년</option></select>
+          <select id="reg-class" class="input-field" style="margin:0;"><option value="">반</option></select>
+          <select id="reg-num" class="input-field" style="margin:0;"><option value="">번호</option></select>
+        </div>
+        <div class="input-group">
+          <input type="text" id="reg-student-name" class="input-field" placeholder="학생 조회 결과 (이름)" readonly style="background:#e8f0fe; margin:0;">
+          <button class="btn-small" onclick="searchStudent()" style="margin:0;">학생 조회</button>
+        </div>
+      </div>
+
+      <div id="signup-teacher-form" class="hidden">
+        <input type="text" id="reg-teacher-name" class="input-field" placeholder="이름을 입력하세요">
+        <input type="password" id="reg-secret" class="input-field" placeholder="학교 가입 인증 코드">
+      </div>
+
+      <input type="password" id="reg-pw" class="input-field" placeholder="비밀번호 설정" onkeyup="checkPasswordMatch()">
+      <input type="password" id="reg-pw-confirm" class="input-field" placeholder="비밀번호 확인" onkeyup="checkPasswordMatch()">
+      <div id="pw-match-text" class="pw-match">✅ 비밀번호가 일치합니다.</div>
+      <div id="pw-mismatch-text" class="pw-mismatch">❌ 비밀번호가 일치하지 않습니다.</div>
+
+      <button class="btn-primary" onclick="attemptSignup()">가입하기</button>
+      <button class="btn-secondary" onclick="toggleView('login-view')">돌아가기</button>
+    </div>
+  </div>
+
+  <!-- ★ 두 번째 통합 파일(Views_All.html)이 들어올 자리 ★ -->
+  <?!= include('Views_All'); ?>
+
+  <!-- 커스텀 알림창 HTML -->
+  <div id="customAlert" class="custom-modal-overlay hidden">
+    <div class="custom-modal-box">
+      <div id="customAlertMessage" class="custom-modal-text"></div>
+      <button class="custom-modal-btn" onclick="closeAlert()">확인</button>
+    </div>
+  </div>
+
+  <!-- ★ 세 번째 통합 파일(JS_All.html)이 들어올 자리 ★ -->
+  <?!= include('JS_All'); ?>
+
+</body>
+</html>
