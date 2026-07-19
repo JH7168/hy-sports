@@ -34,8 +34,20 @@
 
       <button id="tab-pe-paps-manage" class="pe-nav-btn" onclick="switchPETab('pe-paps-manage')">PAPS</button>
       <button id="tab-pe-sports-manage" class="pe-nav-btn" onclick="switchPETab('pe-sports-manage')">체육한마당</button>
-      <button id="tab-pe-lunch-manage" class="pe-nav-btn" onclick="switchPETab('pe-lunch-manage')">점심시간</button>
+
+      <div class="dropdown">
+        <button id="tab-pe-lunch-manage" class="pe-nav-btn">점심시간 ▾</button>
+        <div class="dropdown-content">
+          <button onclick="switchPETab('pe-facility-futsal', 'tab-pe-lunch-manage')">풋살장</button>
+          <button onclick="switchPETab('pe-facility-gym', 'tab-pe-lunch-manage')">체육관</button>
+          <button onclick="switchPETab('pe-facility-field', 'tab-pe-lunch-manage')">운동장</button>
+          <button onclick="switchPETab('pe-facility-violations', 'tab-pe-lunch-manage')">전체 위반기록</button>
+        </div>
+      </div>
+
+      <button id="tab-pe-sportsclub-manage" class="pe-nav-btn" onclick="switchPETab('pe-sportsclub-manage')">스포츠클럽 관리</button>
       <button id="tab-pe-board-manage" class="pe-nav-btn" onclick="switchPETab('pe-board-manage')">공지사항</button>
+      <button id="tab-pe-suggestion-manage" class="pe-nav-btn hidden" onclick="switchPETab('pe-suggestion-manage')">건의함</button>
 
       <button class="pe-nav-btn" onclick="closePETeacherView()" style="margin-left: auto; background: rgba(255,255,255,0.15); padding: 15px 20px;">나가기 ↩</button>
     </div>
@@ -301,8 +313,59 @@
       </div>
     </div>
 
-    <!-- [관리자] 기타 플레이스홀더 -->
-    <div id="content-pe-lunch-manage" class="hidden"><div class="card"><h3 style="margin-top:0; color:#203a43;">📅 점심시간 예약 관리 (준비 중)</h3></div></div>
+    <!-- [관리자] 점심시간 시설 예약 (풋살장/체육관/운동장 공용, JS가 골격을 생성) -->
+    <div id="content-pe-facility-futsal" class="hidden"><div id="pe-facility-futsal-root"><div style="text-align:center; color:#999; padding:20px;">불러오는 중입니다...</div></div></div>
+    <div id="content-pe-facility-gym" class="hidden"><div id="pe-facility-gym-root"><div style="text-align:center; color:#999; padding:20px;">불러오는 중입니다...</div></div></div>
+    <div id="content-pe-facility-field" class="hidden"><div id="pe-facility-field-root"><div style="text-align:center; color:#999; padding:20px;">불러오는 중입니다...</div></div></div>
+
+    <!-- [관리자] 점심시간 시설 통합 위반기록 (풋살장·체육관·운동장 전체) -->
+    <div id="content-pe-facility-violations" class="hidden">
+      <div class="card" style="border-top: 5px solid #d32f2f;">
+        <h3 style="margin-top:0; color:#b71c1c;">🚨 점심시간 시설 이용규칙 위반 통합 조회</h3>
+        <p style="font-size:0.85em; color:#888; margin-top:-8px;">풋살장·체육관·운동장에서 발생한 위반 기록을 모두 모아 보여줍니다.</p>
+        <div id="facility-all-violation-list"><div style="text-align:center; color:#999; padding:15px;">불러오는 중입니다...</div></div>
+      </div>
+    </div>
+
+    <!-- [관리자] 스포츠클럽 부원 명단 관리 -->
+    <div id="content-pe-sportsclub-manage" class="hidden">
+      <div class="card" style="border-top: 5px solid #3949ab;">
+        <h3 style="margin-top:0; color:#283593;">🏅 스포츠클럽 부원 명단 관리</h3>
+        <p style="font-size:0.85em; color:#666; margin-bottom:15px;">여기에 등록된 학생만 학생 화면의 해당 스포츠클럽 탭(자유게시판)을 이용할 수 있습니다.</p>
+        <div style="margin-bottom:15px;">
+          <select id="sportsclub-admin-select" class="input-field" style="max-width:200px;" onchange="sportsClubAdminChangeClub()">
+            <option value="SOCCER">축구부</option>
+            <option value="BASKETBALL">농구부</option>
+            <option value="VOLLEYBALL">배구부</option>
+            <option value="BADMINTON">배드민턴부</option>
+          </select>
+        </div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; background:#f0f2f5; padding:15px; border-radius:8px; margin-bottom:15px;">
+          <select id="sportsclub-add-grade" class="input-field" style="flex:1; min-width:70px; margin:0;"><option value="">학년</option><option value="1">1학년</option><option value="2">2학년</option><option value="3">3학년</option></select>
+          <select id="sportsclub-add-class" class="input-field" style="flex:1; min-width:70px; margin:0;"><option value="">반</option></select>
+          <select id="sportsclub-add-num" class="input-field" style="flex:1; min-width:70px; margin:0;"><option value="">번호</option></select>
+          <input type="text" id="sportsclub-add-name" class="input-field" placeholder="조회 결과" readonly style="flex:1.5; min-width:100px; margin:0; background:#e8f0fe; text-align:center;">
+          <button class="btn-small" onclick="sportsClubSearchStudent()" style="margin:0;">조회</button>
+          <button class="btn-primary" id="btn-sportsclub-add" onclick="sportsClubAddMember()" disabled style="margin:0; flex:1; min-width:90px; background:#3949ab;">부원추가</button>
+        </div>
+        <div style="overflow-x:auto;">
+          <table style="width:100%; border-collapse:collapse; text-align:center; font-size:0.95em;">
+            <thead><tr style="background:#e8eaf6; border-bottom:2px solid #ccc;"><th style="padding:10px;">학번</th><th style="padding:10px;">이름</th><th style="padding:10px;">학년</th><th style="padding:10px;">관리</th></tr></thead>
+            <tbody id="sportsclub-mgr-tbody"><tr><td colspan="4" style="padding:20px; color:#999;">불러오는 중입니다...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- [관리자] 건의함 (박정환 계정에만 nav가 노출됨) -->
+    <div id="content-pe-suggestion-manage" class="hidden">
+      <div class="card" style="border-top: 5px solid #455a64;">
+        <h3 style="margin-top:0; color:#263238;">✉️ 학생 건의함</h3>
+        <p style="font-size:0.85em; color:#888; margin-top:-8px;">학번·이름이 함께 기록된 실명 건의함입니다.</p>
+        <div id="suggestion-admin-list"><div style="text-align:center; color:#999; padding:15px;">불러오는 중입니다...</div></div>
+      </div>
+    </div>
+
     <div id="content-pe-board-manage" class="hidden">
       <div class="card" style="border-top: 5px solid #e91e63;">
         <h3 style="margin-top:0; color:#203a43;">✍️ 홈 화면 공지사항 작성</h3>

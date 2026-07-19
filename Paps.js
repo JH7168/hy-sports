@@ -85,6 +85,31 @@ function getAdminGradeStats(year, token) {
   } catch (e) { return { success: false, message: e.message }; }
 }
 
+// 학년이 올라가면 학번이 바뀌므로(예: 1학년 10101 -> 2학년 20101), 학번이 아니라
+// 이름으로 전년도 PAPS_상세 시트를 찾아 종합점수 증감을 계산한다. 동명이인이 있어
+// 특정할 수 없거나 전년도 데이터 자체가 없으면 비교하지 않고 그 상태를 알려준다.
+function buildPapsGrowthTrack_(name, year, currentTotalScore, currentTotalGrade) {
+  const prevYear = (parseInt(year, 10) - 1).toString();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const prevSheet = ss.getSheetByName('PAPS_상세_' + prevYear);
+  if (!prevSheet) return { status: 'no_data' };
+  const data = prevSheet.getDataRange().getValues();
+  const matches = [];
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][1] && data[i][1].toString().trim() === name) matches.push(data[i]);
+  }
+  if (matches.length === 0) return { status: 'no_data' };
+  if (matches.length > 1) return { status: 'ambiguous' };
+  const prevTotalScore = parseFloat(matches[0][2]);
+  if (isNaN(prevTotalScore) || isNaN(currentTotalScore)) return { status: 'no_data' };
+  const delta = Math.round((currentTotalScore - prevTotalScore) * 10) / 10;
+  return {
+    status: 'ok', prevYear: prevYear, prevTotalScore: prevTotalScore, prevTotalGrade: matches[0][3],
+    currentTotalScore: currentTotalScore, currentTotalGrade: currentTotalGrade,
+    delta: delta, improved: delta > 0
+  };
+}
+
 // studentId는 반드시 본인(학생) 또는 교사만 조회 가능하도록 검증한다.
 function getStudentPapsDetail(studentId, year, token) {
   try {
@@ -188,7 +213,8 @@ function getStudentPapsDetail(studentId, year, token) {
         strength: { school: getStats(schoolData['strengthRec'], parseFloat(targetRow[10])), class: getStats(classData['strengthRec'], parseFloat(targetRow[10])) },
         power: { school: getStats(schoolData['powerRec'], parseFloat(targetRow[13])), class: getStats(classData['powerRec'], parseFloat(targetRow[13])) },
         bmi: { school: { avg: getStats(schoolData['bmiRec'], parseFloat(targetRow[16])).avg, rank: getStats(bmiScoresSchool, targetBmiScore).rank }, class: { avg: getStats(classData['bmiRec'], parseFloat(targetRow[16])).avg, rank: getStats(bmiScoresClass, targetBmiScore).rank } }
-      }
+      },
+      growthTrack: buildPapsGrowthTrack_(targetRow[1].toString().trim(), year, parseFloat(targetRow[2]), targetRow[3])
     };
 
     const FOLDER_ID = "1m31h6WC-EGuVHjaHi1ecBKdSDRBvOAvP"; const folder = DriveApp.getFolderById(FOLDER_ID);

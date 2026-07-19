@@ -60,6 +60,15 @@ function setupSystemSheets() {
   // 소규모수업 - 체대입시반 시트 세팅
   setupPhysPrepSheets();
 
+  // 점심시간 - 풋살장/체육관/운동장 시설 예약 시트 세팅
+  setupFacilitySheets();
+
+  // 스포츠클럽(축구·농구·배구·배드민턴부) 시트 세팅
+  setupSportsClubSheets();
+
+  // 건의함 시트 세팅
+  setupSuggestionSheets();
+
   // 교사 가입 인증 코드: 소스코드가 아닌 스크립트 속성에 보관 (없을 때만 최초 1회 초기화)
   const props = PropertiesService.getScriptProperties();
   if (!props.getProperty('PE_TEACHER_CODE')) props.setProperty('PE_TEACHER_CODE', 'PY4312');

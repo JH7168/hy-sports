@@ -1,0 +1,563 @@
+<script>
+  // =========================================================================
+  // 점심시간 시설 예약 모듈 (풋살장/체육관/운동장 공용)
+  // =========================================================================
+  const FACILITY_PREFIX = { FUTSAL: 'futsal', GYM: 'gym', FIELD: 'field' };
+  const FACILITY_KOR = { FUTSAL: '풋살장', GYM: '체육관', FIELD: '운동장' };
+  const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
+  const GYM_WEEKDAYS = ['월', '화', '수', '목', '금']; // 토·일은 등교하지 않으므로 배정 대상에서 제외
+  let facilitySlotsCache = {};
+  let facilitySelectedSlotId = {};
+  let gymScheduleCache = {};
+
+  function facilityModeLabel(mode, grade) { return mode === 'GRADE' ? (grade + '학년 매칭') : '자유 팀 경쟁(교사 포함)'; }
+  function facilityStatusLabel(status) { return { OPEN: '모집중', DRAWN: '추첨완료', CANCELLED: '취소됨' }[status] || status; }
+  function facilityFormatDT(dt) { return (dt || '').toString().replace('T', ' '); }
+  function facilityToLocalInputStr_(d) {
+    const pad = n => n.toString().padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  // 관리자 화면(풋살장/체육관/운동장)은 구조가 동일하므로 마크업을 3번 중복 작성하지 않고
+  // 탭을 열 때마다 이 함수로 골격을 생성한 뒤 데이터를 채워 넣는다.
+  function openFacilityAdminTab(facility) {
+    const p = FACILITY_PREFIX[facility];
+    const kor = FACILITY_KOR[facility];
+    const root = document.getElementById(`pe-facility-${p}-root`);
+    let html = `<div class="card" style="border-top: 5px solid #00838f; margin-bottom: 20px;">
+      <h3 style="margin-top:0; color:#006064;">🥅 ${kor} 예약 슬롯 관리</h3>
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap:10px; background:#f0f2f5; padding:15px; border-radius:8px; margin-bottom:20px;">
+        <div><label style="font-size:0.8em; color:#666;">이용일자</label><input type="date" id="${p}-new-date" class="input-field" style="margin:0;" onchange="facilityAutoFillWindow('${facility}')"></div>
+        <div><label style="font-size:0.8em; color:#666;">모드</label><select id="${p}-new-mode" class="input-field" style="margin:0;" onchange="facilityToggleGradeSelect('${facility}')"><option value="GRADE">학년별 매칭</option><option value="OPEN">자유 팀 경쟁(교사 포함)</option></select></div>
+        <div id="${p}-new-grade-wrap"><label style="font-size:0.8em; color:#666;">대상 학년</label><select id="${p}-new-grade" class="input-field" style="margin:0;"><option value="1">1학년</option><option value="2">2학년</option><option value="3">3학년</option></select></div>
+        <div><label style="font-size:0.8em; color:#666;">신청 시작</label><input type="datetime-local" id="${p}-new-appstart" class="input-field" style="margin:0;"></div>
+        <div><label style="font-size:0.8em; color:#666;">신청 마감</label><input type="datetime-local" id="${p}-new-append" class="input-field" style="margin:0;"></div>
+        <div><label style="font-size:0.8em; color:#666;">발표 시각</label><input type="datetime-local" id="${p}-new-announce" class="input-field" style="margin:0;"></div>
+        <div><label style="font-size:0.8em; color:#666;">선발 팀 수</label><input type="number" id="${p}-new-teamcount" class="input-field" value="2" min="1" style="margin:0;"></div>
+      </div>
+      <p style="font-size:0.8em; color:#888; margin-top:-12px; margin-bottom:12px;">※ 이용일자를 고르면 "이용일 2일 전 06:00~09:00 신청, 12:00 발표"가 기본값으로 채워집니다. 필요하면 직접 수정하세요.</p>
+      <button class="btn-primary" onclick="facilityCreateSlot('${facility}')" style="background:#00838f;">➕ 예약 슬롯 생성</button>
+    </div>`;
+
+    if (facility === 'GYM') {
+      html += `<div class="card" style="border-top: 5px solid #8d6e63; margin-bottom: 20px;">
+        <h3 style="margin-top:0; color:#4e342e;">📅 요일별 스포츠클럽 준비일 기본 배정</h3>
+        <p style="font-size:0.85em; color:#666; margin-bottom:15px;">기본 세팅은 스포츠클럽대회 준비 학생 전용입니다. 배정 안 된 요일(자유이용)에만 위에서 대회를 열 수 있습니다.</p>
+        <div id="gym-schedule-editor"><div style="text-align:center; color:#999; padding:15px;">불러오는 중입니다...</div></div>
+      </div>`;
+    }
+
+    html += `<div class="card" style="border-top: 5px solid #00838f; margin-bottom: 20px;">
+      <h3 style="margin-top:0; color:#006064;">📋 예약 슬롯 목록</h3>
+      <div style="overflow-x:auto;">
+        <table style="width:100%; border-collapse:collapse; text-align:center; font-size:0.92em;">
+          <thead><tr style="background:#e0f7fa; border-bottom:2px solid #ccc;"><th style="padding:8px;">이용일자</th><th style="padding:8px;">모드</th><th style="padding:8px;">신청기간</th><th style="padding:8px;">신청수</th><th style="padding:8px;">상태</th><th style="padding:8px;">관리</th></tr></thead>
+          <tbody id="${p}-slot-tbody"><tr><td colspan="6" style="padding:20px; color:#999;">불러오는 중입니다...</td></tr></tbody>
+        </table>
+      </div>
+      <div id="${p}-slot-detail" style="margin-top:20px;"></div>
+    </div>
+
+    <div class="card" style="border-top: 5px solid #d32f2f; margin-bottom: 20px;">
+      <h3 style="margin-top:0; color:#b71c1c;">🎯 ${kor} 관리학생 명단</h3>
+      <p style="font-size:0.85em; color:#666; margin-bottom:15px;">여기에 등록된 학생만 학생 화면에서 이용규칙 위반 기록을 입력할 수 있습니다.</p>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; background:#f0f2f5; padding:15px; border-radius:8px; margin-bottom:15px;">
+        <select id="${p}-mgr-add-grade" class="input-field" style="flex:1; min-width:70px; margin:0;"><option value="">학년</option><option value="1">1학년</option><option value="2">2학년</option><option value="3">3학년</option></select>
+        <select id="${p}-mgr-add-class" class="input-field" style="flex:1; min-width:70px; margin:0;"><option value="">반</option></select>
+        <select id="${p}-mgr-add-num" class="input-field" style="flex:1; min-width:70px; margin:0;"><option value="">번호</option></select>
+        <input type="text" id="${p}-mgr-add-name" class="input-field" placeholder="조회 결과" readonly style="flex:1.5; min-width:100px; margin:0; background:#e8f0fe; text-align:center;">
+        <button class="btn-small" onclick="facilityMgrSearchStudent('${facility}')" style="margin:0;">조회</button>
+        <button class="btn-primary" id="btn-${p}-mgr-add" onclick="facilityAddManager('${facility}')" disabled style="margin:0; flex:1; min-width:90px; background:#d32f2f;">명단추가</button>
+      </div>
+      <div style="overflow-x:auto;">
+        <table style="width:100%; border-collapse:collapse; text-align:center; font-size:0.95em;">
+          <thead><tr style="background:#ffebee; border-bottom:2px solid #ccc;"><th style="padding:10px;">학번</th><th style="padding:10px;">이름</th><th style="padding:10px;">학년</th><th style="padding:10px;">관리</th></tr></thead>
+          <tbody id="${p}-mgr-tbody"><tr><td colspan="4" style="padding:20px; color:#999;">불러오는 중입니다...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card" style="border-top: 5px solid #d32f2f;">
+      <h3 style="margin-top:0; color:#b71c1c;">🚨 ${kor} 이용규칙 위반 기록 전체 조회</h3>
+      <div id="${p}-admin-violation-list"><div style="text-align:center; color:#999; padding:15px;">불러오는 중입니다...</div></div>
+    </div>`;
+
+    root.innerHTML = html;
+    loadFacilityAdmin(facility);
+    loadFacilityManagers(facility);
+    loadFacilityViolationsAdmin(facility);
+    if (facility === 'GYM') loadGymScheduleAdmin();
+  }
+
+  // -------------------------------------------------------------------------
+  // 관리자 - 슬롯 생성/목록
+  // -------------------------------------------------------------------------
+  function facilityToggleGradeSelect(facility) {
+    const p = FACILITY_PREFIX[facility];
+    const mode = document.getElementById(`${p}-new-mode`).value;
+    document.getElementById(`${p}-new-grade-wrap`).style.display = mode === 'GRADE' ? 'block' : 'none';
+  }
+
+  // 이용일자를 고르면 "이용일 2일 전 06:00~09:00 신청, 12:00 발표"를 기본값으로 채워준다(수정 가능).
+  function facilityAutoFillWindow(facility) {
+    const p = FACILITY_PREFIX[facility];
+    const dateStr = document.getElementById(`${p}-new-date`).value;
+    if (!dateStr) return;
+    const base = new Date(dateStr + 'T00:00:00');
+    base.setDate(base.getDate() - 2);
+    const start = new Date(base); start.setHours(6, 0, 0, 0);
+    const end = new Date(base); end.setHours(9, 0, 0, 0);
+    const announce = new Date(base); announce.setHours(12, 0, 0, 0);
+    document.getElementById(`${p}-new-appstart`).value = facilityToLocalInputStr_(start);
+    document.getElementById(`${p}-new-append`).value = facilityToLocalInputStr_(end);
+    document.getElementById(`${p}-new-announce`).value = facilityToLocalInputStr_(announce);
+    if (facility === 'GYM') facilityWarnIfClubDay_(dateStr);
+  }
+
+  // 체육관 슬롯을 만들 때, 그 요일이 이미 스포츠클럽 준비일로 지정돼 있으면 알려준다(막지는 않음).
+  function facilityWarnIfClubDay_(dateStr) {
+    const d = new Date(dateStr + 'T00:00:00');
+    const dayLabel = WEEKDAY_LABELS[d.getDay()];
+    const assigned = gymScheduleCache[dayLabel];
+    if (assigned) showAlert(`⚠️ ${dateStr}(${dayLabel})은 "${assigned}" 준비일로 지정되어 있습니다.\n필요 시 요일 배정을 확인하고 진행하세요.`);
+  }
+
+  function loadFacilityAdmin(facility) {
+    const p = FACILITY_PREFIX[facility];
+    facilitySelectedSlotId[facility] = null;
+    const detail = document.getElementById(`${p}-slot-detail`); if (detail) detail.innerHTML = '';
+    const tbody = document.getElementById(`${p}-slot-tbody`);
+    tbody.innerHTML = `<tr><td colspan="6" style="padding:20px; color:#999;">불러오는 중입니다...</td></tr>`;
+    gsRun('getFacilitySlotsAdmin', facility, currentUser.token).then(function(res) {
+      facilitySlotsCache[facility] = res.success ? res.list : [];
+      if (facilitySlotsCache[facility].length === 0) { tbody.innerHTML = `<tr><td colspan="6" style="padding:20px; color:#999;">생성된 예약 슬롯이 없습니다. 위에서 새로 만들어보세요.</td></tr>`; return; }
+      tbody.innerHTML = '';
+      facilitySlotsCache[facility].forEach(s => {
+        const statusColor = s.status === 'DRAWN' ? '#2e7d32' : (s.status === 'CANCELLED' ? '#999' : '#00838f');
+        tbody.innerHTML += `<tr style="border-bottom:1px solid #eee;"><td style="padding:8px; font-weight:bold;">${escapeHtml(s.date)}</td><td style="padding:8px;">${escapeHtml(facilityModeLabel(s.mode, s.grade))}</td><td style="padding:8px; font-size:0.85em; color:#666;">${escapeHtml(facilityFormatDT(s.appStart))} ~ ${escapeHtml(facilityFormatDT(s.appEnd))}</td><td style="padding:8px;">${s.appCount}팀</td><td style="padding:8px; font-weight:bold; color:${statusColor};">${facilityStatusLabel(s.status)}</td><td style="padding:8px;"><button class="btn-small" style="background:#00838f;" onclick="facilitySelectSlot('${facility}', '${s.id}')">상세관리</button></td></tr>`;
+      });
+    });
+  }
+
+  function facilityCreateSlot(facility) {
+    const p = FACILITY_PREFIX[facility];
+    const date = document.getElementById(`${p}-new-date`).value;
+    const mode = document.getElementById(`${p}-new-mode`).value;
+    const grade = document.getElementById(`${p}-new-grade`).value;
+    const appStart = document.getElementById(`${p}-new-appstart`).value;
+    const appEnd = document.getElementById(`${p}-new-append`).value;
+    const announceAt = document.getElementById(`${p}-new-announce`).value;
+    const teamCount = document.getElementById(`${p}-new-teamcount`).value;
+    if (!date || !appStart || !appEnd || !announceAt) { showAlert('이용일자, 신청 시작/마감, 발표시각을 모두 입력하세요.'); return; }
+    gsRun('createFacilitySlot', facility, date, mode, grade, appStart, appEnd, announceAt, teamCount, currentUser.token).then(function(res) {
+      showAlert(res.message);
+      if (res.success) loadFacilityAdmin(facility);
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // 관리자 - 슬롯 상세관리(수정/추첨/신청현황/결과수동지정/우천공지)
+  // -------------------------------------------------------------------------
+  function facilitySelectSlot(facility, slotId) {
+    facilitySelectedSlotId[facility] = slotId;
+    const p = FACILITY_PREFIX[facility];
+    const slot = (facilitySlotsCache[facility] || []).find(s => s.id === slotId);
+    if (!slot) return;
+    const detail = document.getElementById(`${p}-slot-detail`);
+    detail.innerHTML = `<div class="card" style="border-top:4px solid #00838f;">
+      <h4 style="margin-top:0; color:#006064;">🛠️ ${escapeHtml(slot.date)} 슬롯 상세관리</h4>
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap:10px; background:#f0f2f5; padding:15px; border-radius:8px; margin-bottom:15px;">
+        <div><label style="font-size:0.8em; color:#666;">이용일자</label><input type="date" id="${p}-edit-date" class="input-field" style="margin:0;" value="${escapeHtml(slot.date)}"></div>
+        <div><label style="font-size:0.8em; color:#666;">모드</label><select id="${p}-edit-mode" class="input-field" style="margin:0;" onchange="facilityToggleEditGradeSelect('${facility}')"><option value="GRADE" ${slot.mode === 'GRADE' ? 'selected' : ''}>학년별 매칭</option><option value="OPEN" ${slot.mode === 'OPEN' ? 'selected' : ''}>자유 팀 경쟁(교사 포함)</option></select></div>
+        <div id="${p}-edit-grade-wrap" style="display:${slot.mode === 'GRADE' ? 'block' : 'none'};"><label style="font-size:0.8em; color:#666;">대상 학년</label><select id="${p}-edit-grade" class="input-field" style="margin:0;"><option value="1" ${slot.grade == 1 ? 'selected' : ''}>1학년</option><option value="2" ${slot.grade == 2 ? 'selected' : ''}>2학년</option><option value="3" ${slot.grade == 3 ? 'selected' : ''}>3학년</option></select></div>
+        <div><label style="font-size:0.8em; color:#666;">신청 시작</label><input type="datetime-local" id="${p}-edit-appstart" class="input-field" style="margin:0;" value="${escapeHtml(slot.appStart)}"></div>
+        <div><label style="font-size:0.8em; color:#666;">신청 마감</label><input type="datetime-local" id="${p}-edit-append" class="input-field" style="margin:0;" value="${escapeHtml(slot.appEnd)}"></div>
+        <div><label style="font-size:0.8em; color:#666;">발표 시각</label><input type="datetime-local" id="${p}-edit-announce" class="input-field" style="margin:0;" value="${escapeHtml(slot.announceAt)}"></div>
+        <div><label style="font-size:0.8em; color:#666;">선발 팀 수</label><input type="number" id="${p}-edit-teamcount" class="input-field" style="margin:0;" value="${escapeHtml(slot.teamCount)}" min="1"></div>
+      </div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:20px;">
+        <button class="btn-primary" style="flex:1; min-width:120px; background:#00838f;" onclick="facilitySaveSlotEdit('${facility}')">💾 정보 저장</button>
+        <button class="btn-primary" style="flex:1; min-width:120px; background:#ff9800;" onclick="facilityDrawSlotNow('${facility}')">🎲 지금 (재)추첨</button>
+        <button class="btn-primary" style="flex:1; min-width:120px; background:#607d8b;" onclick="facilityPostRainNotice('${facility}')">🌧️ 우천취소 안내 공지 등록</button>
+        <button class="btn-primary" style="flex:1; min-width:120px; background:#fff; color:#d32f2f; border:1px solid #d32f2f;" onclick="facilityCancelSlotNow('${facility}')">🛑 슬롯 취소</button>
+      </div>
+      <h4 style="color:#006064; margin-bottom:8px;">📥 신청 현황 (팀원 전원 가입확정된 팀만 추첨 대상, 선정팀은 초록색)</h4>
+      <div id="${p}-app-list"><div style="text-align:center; color:#999; padding:15px;">불러오는 중입니다...</div></div>
+      <button class="btn-primary" style="background:#4a148c; margin-top:15px;" onclick="facilityOverrideResult('${facility}')">✅ 체크한 팀으로 발표 결과 수동 지정</button>
+    </div>`;
+    facilityLoadApplications(facility, slotId);
+  }
+
+  function facilityToggleEditGradeSelect(facility) {
+    const p = FACILITY_PREFIX[facility];
+    const mode = document.getElementById(`${p}-edit-mode`).value;
+    document.getElementById(`${p}-edit-grade-wrap`).style.display = mode === 'GRADE' ? 'block' : 'none';
+  }
+
+  function facilityMemberBadges_(members) {
+    return members.map(m => `<span style="display:inline-block; margin:2px 4px 2px 0; padding:2px 8px; border-radius:10px; font-size:0.85em; ${m.confirmed ? 'background:#e8f5e9; color:#2e7d32;' : 'background:#fff3e0; color:#e65100;'}">${m.confirmed ? '✅' : '⏳'} ${escapeHtml(m.name)}</span>`).join('');
+  }
+
+  function facilityLoadApplications(facility, slotId) {
+    const p = FACILITY_PREFIX[facility];
+    gsRun('getFacilityApplicationsAdmin', facility, slotId, currentUser.token).then(function(res) {
+      const container = document.getElementById(`${p}-app-list`);
+      if (!container) return;
+      if (!res.success || res.list.length === 0) { container.innerHTML = `<div style="text-align:center; color:#999; padding:15px;">신청된 팀이 없습니다.</div>`; return; }
+      let html = `<div style="overflow-x:auto;"><table style="width:100%; border-collapse:collapse; text-align:center; font-size:0.9em;"><thead><tr style="background:#f3e5f5; border-bottom:2px solid #ccc;"><th style="padding:6px;">선정</th><th style="padding:6px;">팀명</th><th style="padding:6px;">팀원(가입확정 현황)</th><th style="padding:6px;">팀장</th><th style="padding:6px;">신청일시</th><th style="padding:6px;">관리</th></tr></thead><tbody>`;
+      res.list.forEach(a => {
+        html += `<tr style="border-bottom:1px solid #eee; ${a.selected ? 'background:#e8f5e9;' : ''}"><td style="padding:6px;"><input type="checkbox" class="${p}-app-checkbox" value="${escapeHtml(a.id)}" ${a.selected ? 'checked' : ''}></td><td style="padding:6px; font-weight:bold;">${escapeHtml(a.teamName)}${a.selected ? ' 🏆' : ''}</td><td style="padding:6px; text-align:left;">${facilityMemberBadges_(a.members)}</td><td style="padding:6px;">${escapeHtml(a.leaderName)}(${escapeHtml(a.leaderRole)})</td><td style="padding:6px; color:#888;">${escapeHtml(a.appliedAt)}</td><td style="padding:6px;"><button class="btn-small" style="background:#d32f2f; padding:6px 10px;" onclick="facilityRemoveApplication('${facility}', '${escapeHtml(a.id)}')">삭제</button></td></tr>`;
+      });
+      html += `</tbody></table></div>`;
+      container.innerHTML = html;
+    });
+  }
+
+  function facilitySaveSlotEdit(facility) {
+    const slotId = facilitySelectedSlotId[facility]; if (!slotId) return;
+    const p = FACILITY_PREFIX[facility];
+    const date = document.getElementById(`${p}-edit-date`).value;
+    const mode = document.getElementById(`${p}-edit-mode`).value;
+    const grade = document.getElementById(`${p}-edit-grade`).value;
+    const appStart = document.getElementById(`${p}-edit-appstart`).value;
+    const appEnd = document.getElementById(`${p}-edit-append`).value;
+    const announceAt = document.getElementById(`${p}-edit-announce`).value;
+    const teamCount = document.getElementById(`${p}-edit-teamcount`).value;
+    gsRun('updateFacilitySlot', facility, slotId, date, mode, grade, appStart, appEnd, announceAt, teamCount, '', currentUser.token).then(function(res) {
+      showAlert(res.message); if (res.success) loadFacilityAdmin(facility);
+    });
+  }
+
+  function facilityDrawSlotNow(facility) {
+    const slotId = facilitySelectedSlotId[facility]; if (!slotId) return;
+    showConfirm('지금 즉시 무작위 추첨을 (다시) 실행할까요?<br>기존 선정 결과는 초기화되고, 팀원 전원이 가입확정된 팀 중에서 새로 뽑힙니다.', function() {
+      gsRun('drawFacilitySlot', facility, slotId, currentUser.token).then(function(res) {
+        showAlert(res.message);
+        if (res.success) { facilityLoadApplications(facility, slotId); loadFacilityAdmin(facility); }
+      });
+    });
+  }
+
+  function facilityCancelSlotNow(facility) {
+    const slotId = facilitySelectedSlotId[facility]; if (!slotId) return;
+    showConfirm('이 예약 슬롯을 취소하시겠습니까?', function() {
+      gsRun('cancelFacilitySlot', facility, slotId, currentUser.token).then(function(res) { showAlert(res.message); if (res.success) loadFacilityAdmin(facility); });
+    });
+  }
+
+  function facilityPostRainNotice(facility) {
+    const slotId = facilitySelectedSlotId[facility]; if (!slotId) return;
+    showConfirm('이 슬롯의 우천취소 안내문을 홈 공지사항에 등록하시겠습니까?', function() {
+      gsRun('postFacilityRainNotice', facility, slotId, currentUser.token).then(function(res) { showAlert(res.message); });
+    });
+  }
+
+  function facilityRemoveApplication(facility, applicationId) {
+    showConfirm('이 신청을 삭제하시겠습니까?', function() {
+      gsRun('removeFacilityApplication', facility, applicationId, currentUser.token).then(function(res) {
+        showAlert(res.message);
+        if (res.success) facilityLoadApplications(facility, facilitySelectedSlotId[facility]);
+      });
+    });
+  }
+
+  function facilityOverrideResult(facility) {
+    const slotId = facilitySelectedSlotId[facility]; if (!slotId) return;
+    const p = FACILITY_PREFIX[facility];
+    const checked = document.querySelectorAll(`.${p}-app-checkbox:checked`);
+    const ids = Array.prototype.map.call(checked, function(el) { return el.value; });
+    showConfirm(`선택한 ${ids.length}개 팀으로 발표 결과를 수동 확정하시겠습니까?`, function() {
+      gsRun('overrideFacilityResult', facility, slotId, ids, currentUser.token).then(function(res) {
+        showAlert(res.message);
+        if (res.success) { facilityLoadApplications(facility, slotId); loadFacilityAdmin(facility); }
+      });
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // 관리자 - 시설 관리학생 명단
+  // -------------------------------------------------------------------------
+  let facilityMgrVerifiedStudent = {};
+  function loadFacilityManagers(facility) {
+    const p = FACILITY_PREFIX[facility];
+    const classSel = document.getElementById(`${p}-mgr-add-class`), numSel = document.getElementById(`${p}-mgr-add-num`);
+    if (classSel && classSel.options.length <= 1) { for (let i = 1; i <= 8; i++) classSel.innerHTML += `<option value="${i}">${i}반</option>`; }
+    if (numSel && numSel.options.length <= 1) { for (let i = 1; i <= 25; i++) numSel.innerHTML += `<option value="${i}">${i}번</option>`; }
+    document.getElementById(`${p}-mgr-add-name`).value = '';
+    document.getElementById(`btn-${p}-mgr-add`).disabled = true;
+    facilityMgrVerifiedStudent[facility] = null;
+
+    const tbody = document.getElementById(`${p}-mgr-tbody`);
+    tbody.innerHTML = `<tr><td colspan="4" style="padding:20px; color:#999;">불러오는 중입니다...</td></tr>`;
+    gsRun('getFacilityManagers', facility, currentUser.token).then(function(res) {
+      if (!res.success || res.list.length === 0) { tbody.innerHTML = `<tr><td colspan="4" style="padding:20px; color:#999;">등록된 관리학생이 없습니다.</td></tr>`; return; }
+      tbody.innerHTML = '';
+      res.list.forEach(s => {
+        tbody.innerHTML += `<tr style="border-bottom:1px solid #eee;"><td style="padding:8px;">${escapeHtml(s.id)}</td><td style="padding:8px; font-weight:bold;">${escapeHtml(s.name)}</td><td style="padding:8px;">${escapeHtml(s.grade)}학년</td><td style="padding:8px;"><button class="btn-small" style="background:#d32f2f;" onclick="facilityRemoveManager('${facility}', '${escapeHtml(s.id)}')">삭제</button></td></tr>`;
+      });
+    });
+  }
+
+  function facilityMgrSearchStudent(facility) {
+    const p = FACILITY_PREFIX[facility];
+    const g = document.getElementById(`${p}-mgr-add-grade`).value, c = document.getElementById(`${p}-mgr-add-class`).value, n = document.getElementById(`${p}-mgr-add-num`).value;
+    const nameInput = document.getElementById(`${p}-mgr-add-name`), addBtn = document.getElementById(`btn-${p}-mgr-add`);
+    if (!g || !c || !n) { showAlert('학년, 반, 번호를 모두 선택하세요.'); return; }
+    nameInput.value = '조회 중...'; addBtn.disabled = true; facilityMgrVerifiedStudent[facility] = null;
+    gsRun('findStudent', g, c, n).then(function(res) {
+      if (res.success) { nameInput.value = res.name; facilityMgrVerifiedStudent[facility] = g + c.toString().padStart(2, '0') + n.toString().padStart(2, '0'); addBtn.disabled = false; } else { nameInput.value = ''; showAlert(res.message); }
+    });
+  }
+
+  function facilityAddManager(facility) {
+    const studentId = facilityMgrVerifiedStudent[facility]; if (!studentId) return;
+    gsRun('addFacilityManager', facility, studentId, currentUser.token).then(function(res) { showAlert(res.message); if (res.success) loadFacilityManagers(facility); });
+  }
+
+  function facilityRemoveManager(facility, studentId) {
+    showConfirm('정말 관리학생 명단에서 삭제하시겠습니까?', function() {
+      gsRun('removeFacilityManager', facility, studentId, currentUser.token).then(function(res) { showAlert(res.message); loadFacilityManagers(facility); });
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // 위반 기록 - 관리자/관리학생 공용 렌더링
+  // -------------------------------------------------------------------------
+  function facilityRenderViolationList_(facility, containerId, res) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    if (!res.success) { container.innerHTML = `<div style="color:red; text-align:center; padding:15px;">${escapeHtml(res.message)}</div>`; return; }
+    if (res.list.length === 0) { container.innerHTML = `<div style="color:#999; text-align:center; padding:15px;">등록된 위반 기록이 없습니다.</div>`; return; }
+    let html = `<div style="overflow-x:auto;"><table style="width:100%; border-collapse:collapse; text-align:center; font-size:0.9em;"><thead><tr style="background:#ffebee; border-bottom:2px solid #ccc;"><th style="padding:6px;">위반일자</th><th style="padding:6px;">학번</th><th style="padding:6px;">이름</th><th style="padding:6px;">누적횟수</th><th style="padding:6px;">사유</th><th style="padding:6px;">등록자</th><th style="padding:6px;">관리</th></tr></thead><tbody>`;
+    res.list.forEach(v => {
+      html += `<tr style="border-bottom:1px solid #eee;"><td style="padding:6px; font-weight:bold; color:#d32f2f;">${escapeHtml(v.violationDate)}</td><td style="padding:6px;">${escapeHtml(v.studentId)}</td><td style="padding:6px; font-weight:bold;">${escapeHtml(v.name)}</td><td style="padding:6px; font-weight:bold; color:#d32f2f;">${res.countMap[v.studentId] || 0}회</td><td style="padding:6px; text-align:left;">${escapeHtml(v.reason)}</td><td style="padding:6px;">${escapeHtml(v.recorderName)}</td><td style="padding:6px;"><button class="btn-small" style="background:#999; padding:6px 10px;" onclick="facilityRemoveViolation('${facility}', '${escapeHtml(v.id)}', '${containerId}')">삭제</button></td></tr>`;
+    });
+    html += `</tbody></table></div>`;
+    container.innerHTML = html;
+  }
+
+  function facilityRemoveViolation(facility, recordId, containerId) {
+    showConfirm('이 위반 기록을 삭제하시겠습니까?', function() {
+      gsRun('removeFacilityViolation', facility, recordId, currentUser.token).then(function(res) {
+        showAlert(res.message);
+        if (containerId === 'facility-all-violation-list') loadAllFacilityViolationsAdmin();
+        else if (containerId.indexOf('admin-violation-list') > -1) loadFacilityViolationsAdmin(facility);
+        else loadFacilityViolationsForManager(facility);
+      });
+    });
+  }
+
+  function loadFacilityViolationsAdmin(facility) {
+    const p = FACILITY_PREFIX[facility];
+    document.getElementById(`${p}-admin-violation-list`).innerHTML = `<div style="text-align:center; color:#999; padding:15px;">불러오는 중입니다...</div>`;
+    gsRun('getFacilityViolations', facility, currentUser.token).then(function(res) { facilityRenderViolationList_(facility, `${p}-admin-violation-list`, res); });
+  }
+
+  // -------------------------------------------------------------------------
+  // 관리자 - 3개 시설 통합 위반기록 조회 (체육교사 전용)
+  // -------------------------------------------------------------------------
+  function loadAllFacilityViolationsAdmin() {
+    const container = document.getElementById('facility-all-violation-list');
+    container.innerHTML = `<div style="text-align:center; color:#999; padding:15px;">불러오는 중입니다...</div>`;
+    gsRun('getAllFacilityViolations', currentUser.token).then(function(res) {
+      if (!res.success) { container.innerHTML = `<div style="color:red; text-align:center; padding:15px;">${escapeHtml(res.message)}</div>`; return; }
+      if (res.list.length === 0) { container.innerHTML = `<div style="color:#999; text-align:center; padding:15px;">등록된 위반 기록이 없습니다.</div>`; return; }
+      let html = `<div style="overflow-x:auto;"><table style="width:100%; border-collapse:collapse; text-align:center; font-size:0.9em;"><thead><tr style="background:#ffebee; border-bottom:2px solid #ccc;"><th style="padding:6px;">위반일자</th><th style="padding:6px;">장소</th><th style="padding:6px;">학번</th><th style="padding:6px;">이름</th><th style="padding:6px;">전체 누적횟수</th><th style="padding:6px;">사유</th><th style="padding:6px;">등록자</th><th style="padding:6px;">관리</th></tr></thead><tbody>`;
+      res.list.forEach(v => {
+        html += `<tr style="border-bottom:1px solid #eee;"><td style="padding:6px; font-weight:bold; color:#d32f2f;">${escapeHtml(v.violationDate)}</td><td style="padding:6px; font-weight:bold; color:#00838f;">${escapeHtml(v.facilityLabel)}</td><td style="padding:6px;">${escapeHtml(v.studentId)}</td><td style="padding:6px; font-weight:bold;">${escapeHtml(v.name)}</td><td style="padding:6px; font-weight:bold; color:#d32f2f;">${res.countMap[v.studentId] || 0}회</td><td style="padding:6px; text-align:left;">${escapeHtml(v.reason)}</td><td style="padding:6px;">${escapeHtml(v.recorderName)}</td><td style="padding:6px;"><button class="btn-small" style="background:#999; padding:6px 10px;" onclick="facilityRemoveViolation('${v.facility}', '${escapeHtml(v.id)}', 'facility-all-violation-list')">삭제</button></td></tr>`;
+      });
+      html += `</tbody></table></div>`;
+      container.innerHTML = html;
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // 관리자 - 체육관 요일별 스포츠클럽 배정
+  // -------------------------------------------------------------------------
+  function loadGymScheduleAdmin() {
+    const container = document.getElementById('gym-schedule-editor');
+    if (!container) return;
+    container.innerHTML = `<div style="text-align:center; color:#999; padding:15px;">불러오는 중입니다...</div>`;
+    gsRun('getGymWeekdaySchedule', currentUser.token).then(function(res) {
+      gymScheduleCache = res.success ? res.schedule : {};
+      const opts = ['', '축구부', '농구부', '배구부', '배드민턴부'];
+      let html = `<div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(90px,1fr)); gap:10px;">`;
+      GYM_WEEKDAYS.forEach(day => {
+        html += `<div><label style="font-size:0.8em; color:#666;">${day}요일</label><select id="gym-sched-${day}" class="input-field" style="margin:0;">${opts.map(o => `<option value="${o}" ${gymScheduleCache[day] === o ? 'selected' : ''}>${o || '자유이용'}</option>`).join('')}</select></div>`;
+      });
+      html += `</div><button class="btn-primary" style="background:#8d6e63; margin-top:15px;" onclick="saveGymSchedule()">💾 요일 배정 저장</button>`;
+      container.innerHTML = html;
+    });
+  }
+
+  function saveGymSchedule() {
+    const schedule = {};
+    GYM_WEEKDAYS.forEach(day => { schedule[day] = document.getElementById(`gym-sched-${day}`).value; });
+    gsRun('updateGymWeekdaySchedule', schedule, currentUser.token).then(function(res) {
+      showAlert(res.message);
+      if (res.success) { gymScheduleCache = schedule; }
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // 학생/교사 화면 (신청 / 예정 안내 / 발표 결과 / 위반관리)
+  // -------------------------------------------------------------------------
+  function loadFacilityStudentView(facility) {
+    const p = FACILITY_PREFIX[facility];
+    const container = document.getElementById(`${p}-student-container`);
+    container.innerHTML = `<div class="card" style="text-align:center; color:#999;">불러오는 중입니다...</div>`;
+    if (facility === 'GYM') {
+      gsRun('getGymWeekdaySchedule', currentUser.token).then(function(schedRes) {
+        gymScheduleCache = schedRes.success ? schedRes.schedule : {};
+        gsRun('getFacilityBoard', facility, currentUser.token).then(function(res) { renderFacilityStudentView(facility, res); });
+      });
+    } else {
+      gsRun('getFacilityBoard', facility, currentUser.token).then(function(res) { renderFacilityStudentView(facility, res); });
+    }
+  }
+
+  function renderFacilityStudentView(facility, res) {
+    const p = FACILITY_PREFIX[facility];
+    const container = document.getElementById(`${p}-student-container`);
+    if (!res.success) { container.innerHTML = `<div class="card" style="text-align:center; color:red;">${escapeHtml(res.message)}</div>`; return; }
+
+    let html = '';
+
+    if (facility === 'GYM') {
+      const headerCells = GYM_WEEKDAYS.map(d => `<th style="padding:8px; border:1px solid #d7ccc8; background:#8d6e63; color:white;">${d}</th>`).join('');
+      const bodyCells = GYM_WEEKDAYS.map(d => `<td style="padding:8px; border:1px solid #d7ccc8;">${escapeHtml(gymScheduleCache[d] || '자유이용')}</td>`).join('');
+      html += `<div class="card" style="border-top:5px solid #8d6e63; background:#efebe9;"><h3 style="margin-top:0; color:#4e342e; font-size:1em;">📅 체육관 기본 사용 안내</h3><div style="overflow-x:auto;"><table style="border-collapse:collapse; text-align:center; font-size:0.9em; margin:0 auto;"><thead><tr>${headerCells}</tr></thead><tbody><tr>${bodyCells}</tr></tbody></table></div><p style="font-size:0.85em; color:#555; margin:10px 0 0; text-align:center;">스포츠클럽대회 준비학생들만 이용이 가능합니다.</p></div>`;
+    }
+
+    if (res.pendingInvites.length > 0) {
+      html += `<div class="card" style="border-top:5px solid #e91e63;"><h3 style="margin-top:0; color:#c2185b;">📩 나에게 온 팀 초대</h3>`;
+      res.pendingInvites.forEach(inv => {
+        html += `<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; background:#fce4ec; border-radius:8px; padding:12px 15px; margin-bottom:10px;"><div><b>${escapeHtml(inv.teamName)}</b> 팀 (팀장: ${escapeHtml(inv.leaderName)})</div><button class="btn-primary" style="width:auto; margin:0; padding:8px 16px; background:#e91e63;" onclick="facilityConfirmInvite('${facility}', '${escapeHtml(inv.applicationId)}')">✅ 가입 확정하기</button></div>`;
+      });
+      html += `</div>`;
+    }
+
+    html += `<div class="card" style="border-top:5px solid #00838f;"><h3 style="margin-top:0; color:#006064;">📝 지금 신청 가능한 예약</h3>`;
+    if (res.eligibleOpenSlots.length === 0) {
+      html += `<div style="color:#999; text-align:center; padding:10px;">현재 신청 가능한 예약이 없습니다.</div>`;
+    } else {
+      res.eligibleOpenSlots.forEach(s => {
+        const mine = res.myTeams[s.id];
+        html += `<div style="background:#e0f7fa; border-radius:8px; padding:15px; margin-bottom:12px;"><div style="font-weight:bold; color:#006064;">${escapeHtml(s.date)} 이용 (${escapeHtml(facilityModeLabel(s.mode, s.grade))})</div><div style="font-size:0.85em; color:#666; margin:5px 0 10px;">신청마감: ${escapeHtml(facilityFormatDT(s.appEnd))} · 발표: ${escapeHtml(facilityFormatDT(s.announceAt))}</div>`;
+        if (mine) {
+          html += `<div style="background:white; border-radius:6px; padding:10px; font-size:0.92em;">✅ 팀명 <b>${escapeHtml(mine.teamName)}</b>으로 신청함 — ${facilityMemberBadges_(mine.members)}<br><span style="font-size:0.85em; color:${mine.complete ? '#2e7d32' : '#e65100'};">${mine.complete ? '전원 가입확정 완료, 추첨 대상입니다.' : '팀원 전원이 가입확정해야 추첨 대상이 됩니다.'}</span>${mine.complete ? '' : `<br><button class="btn-small" style="background:#999; margin-top:8px;" onclick="facilityCancelMyTeam('${facility}', '${mine.applicationId}')">팀 신청 취소</button>`}</div>`;
+        } else {
+          html += `<div style="display:flex; gap:8px; flex-wrap:wrap;"><input type="text" class="input-field ${p}-team-name" data-slot="${s.id}" placeholder="팀명" style="flex:1; min-width:120px; margin:0;"><textarea class="input-field ${p}-team-members" data-slot="${s.id}" placeholder="초대할 팀원 (학생은 학번, 교사는 이름, 한 줄에 한 명씩)" style="flex:2; min-width:150px; margin:0; height:60px;"></textarea><button class="btn-primary" style="flex:1; min-width:100px; margin:0; background:#00838f;" onclick="facilitySubmitTeam('${facility}', '${s.id}')">팀 신청하기</button></div><div style="font-size:0.8em; color:#888; margin-top:6px;">※ 초대받은 팀원 전원이 각자 로그인해서 가입을 확정해야 신청이 완성됩니다.</div>`;
+        }
+        html += `</div>`;
+      });
+    }
+    html += `</div>`;
+
+    if (res.upcomingSlots.length > 0) {
+      html += `<div class="card" style="border-top:5px solid #00838f;"><h3 style="margin-top:0; color:#006064;">🗓️ 예정된 예약</h3>`;
+      res.upcomingSlots.forEach(s => { html += `<div style="padding:8px 0; border-bottom:1px solid #eee; font-size:0.92em;">${escapeHtml(s.date)} 이용 (${escapeHtml(facilityModeLabel(s.mode, s.grade))}) — 신청 시작: ${escapeHtml(facilityFormatDT(s.appStart))}</div>`; });
+      html += `</div>`;
+    }
+
+    html += `<div class="card" style="border-top:5px solid #00838f;"><h3 style="margin-top:0; color:#006064;">🏆 발표 결과</h3>`;
+    if (res.resultSlots.length === 0) {
+      html += `<div style="color:#999; text-align:center; padding:10px;">아직 발표된 결과가 없습니다.</div>`;
+    } else {
+      res.resultSlots.forEach(s => {
+        const teams = res.resultDetails[s.id] || [];
+        html += `<div style="background:#fff8e1; border-radius:8px; padding:12px 15px; margin-bottom:10px;"><div style="font-weight:bold; color:#e65100;">${escapeHtml(s.date)} 이용 (${escapeHtml(facilityModeLabel(s.mode, s.grade))})</div>`;
+        if (teams.length === 0) { html += `<div style="color:#999; font-size:0.9em; margin-top:5px;">전원 확정된 팀이 없어 선정된 팀이 없습니다.</div>`; }
+        else { teams.forEach(t => { html += `<div style="margin-top:6px; font-size:0.92em;">🏅 <b>${escapeHtml(t.teamName)}</b> - ${escapeHtml(t.members)}</div>`; }); }
+        html += `</div>`;
+      });
+    }
+    html += `</div>`;
+
+    if (res.isManager) {
+      html += `<div class="card" style="border-top:5px solid #d32f2f;"><h3 style="margin-top:0; color:#b71c1c;">🚨 ${escapeHtml(FACILITY_KOR[facility])} 이용규칙 위반 관리</h3><p style="font-size:0.85em; color:#888; margin-top:-8px;">체육교사가 지정한 관리학생만 볼 수 있는 화면입니다.</p>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; background:#fff3e0; padding:15px; border-radius:8px; margin-bottom:15px;">
+          <select id="${p}-viol-grade" class="input-field" style="flex:1; min-width:70px; margin:0;"><option value="">학년</option><option value="1">1학년</option><option value="2">2학년</option><option value="3">3학년</option></select>
+          <select id="${p}-viol-class" class="input-field" style="flex:1; min-width:70px; margin:0;"></select>
+          <select id="${p}-viol-num" class="input-field" style="flex:1; min-width:70px; margin:0;"></select>
+          <input type="text" id="${p}-viol-name" class="input-field" placeholder="조회 결과" readonly style="flex:1.2; min-width:100px; margin:0; background:#e8f0fe; text-align:center;">
+          <button class="btn-small" onclick="facilityMgrSearchViolationTarget('${facility}')" style="margin:0;">조회</button>
+          <input type="date" id="${p}-viol-date" class="input-field" value="${facilityTodayDateStr_()}" style="flex:1; min-width:130px; margin:0;">
+          <input type="text" id="${p}-viol-reason" class="input-field" placeholder="위반 사유" style="flex:2; min-width:150px; margin:0;">
+          <button class="btn-primary" id="btn-${p}-viol-add" onclick="facilitySubmitViolation('${facility}')" disabled style="margin:0; flex:1; min-width:90px; background:#d32f2f;">위반 등록</button>
+        </div>
+        <div id="${p}-mgr-violation-list"></div>
+      </div>`;
+    }
+
+    container.innerHTML = html;
+
+    if (res.isManager) {
+      const classSel = document.getElementById(`${p}-viol-class`), numSel = document.getElementById(`${p}-viol-num`);
+      if (classSel) { for (let i = 1; i <= 8; i++) classSel.innerHTML += `<option value="${i}">${i}반</option>`; }
+      if (numSel) { for (let i = 1; i <= 25; i++) numSel.innerHTML += `<option value="${i}">${i}번</option>`; }
+      loadFacilityViolationsForManager(facility);
+    }
+  }
+
+  function facilitySubmitTeam(facility, slotId) {
+    const p = FACILITY_PREFIX[facility];
+    const nameInput = document.querySelector(`.${p}-team-name[data-slot="${slotId}"]`);
+    const membersInput = document.querySelector(`.${p}-team-members[data-slot="${slotId}"]`);
+    const teamName = nameInput.value.trim();
+    const members = membersInput.value.trim();
+    if (!teamName || !members) { showAlert('팀명과 초대할 팀원을 입력하세요.'); return; }
+    gsRun('createFacilityTeam', facility, slotId, teamName, members, currentUser.token).then(function(res) {
+      showAlert(res.message);
+      if (res.success) loadFacilityStudentView(facility);
+    });
+  }
+
+  function facilityConfirmInvite(facility, applicationId) {
+    gsRun('confirmFacilityMembership', facility, applicationId, currentUser.token).then(function(res) {
+      showAlert(res.message);
+      if (res.success) loadFacilityStudentView(facility);
+    });
+  }
+
+  function facilityCancelMyTeam(facility, applicationId) {
+    showConfirm('내가 만든 팀 신청을 취소하시겠습니까?', function() {
+      gsRun('cancelMyFacilityApplication', facility, applicationId, currentUser.token).then(function(res) { showAlert(res.message); if (res.success) loadFacilityStudentView(facility); });
+    });
+  }
+
+  let facilityMgrViolTarget = {};
+  function facilityMgrSearchViolationTarget(facility) {
+    const p = FACILITY_PREFIX[facility];
+    const g = document.getElementById(`${p}-viol-grade`).value, c = document.getElementById(`${p}-viol-class`).value, n = document.getElementById(`${p}-viol-num`).value;
+    const nameInput = document.getElementById(`${p}-viol-name`), addBtn = document.getElementById(`btn-${p}-viol-add`);
+    if (!g || !c || !n) { showAlert('학년, 반, 번호를 모두 선택하세요.'); return; }
+    nameInput.value = '조회 중...'; addBtn.disabled = true; facilityMgrViolTarget[facility] = null;
+    gsRun('findStudent', g, c, n).then(function(res) {
+      if (res.success) { nameInput.value = res.name; facilityMgrViolTarget[facility] = g + c.toString().padStart(2, '0') + n.toString().padStart(2, '0'); addBtn.disabled = false; } else { nameInput.value = ''; showAlert(res.message); }
+    });
+  }
+
+  function facilityTodayDateStr_() {
+    const d = new Date();
+    return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
+  }
+
+  function facilitySubmitViolation(facility) {
+    const p = FACILITY_PREFIX[facility];
+    const reason = document.getElementById(`${p}-viol-reason`).value.trim();
+    const violationDate = document.getElementById(`${p}-viol-date`).value;
+    const target = facilityMgrViolTarget[facility];
+    if (!target || !reason || !violationDate) { showAlert('학생 조회, 위반일자, 위반 사유를 모두 입력하세요.'); return; }
+    gsRun('addFacilityViolation', facility, target, reason, violationDate, currentUser.token).then(function(res) {
+      showAlert(res.message);
+      if (res.success) { document.getElementById(`${p}-viol-reason`).value = ''; document.getElementById(`${p}-viol-name`).value = ''; document.getElementById(`btn-${p}-viol-add`).disabled = true; facilityMgrViolTarget[facility] = null; loadFacilityViolationsForManager(facility); }
+    });
+  }
+
+  function loadFacilityViolationsForManager(facility) {
+    const p = FACILITY_PREFIX[facility];
+    document.getElementById(`${p}-mgr-violation-list`).innerHTML = `<div style="text-align:center; color:#999; padding:15px;">불러오는 중입니다...</div>`;
+    gsRun('getFacilityViolations', facility, currentUser.token).then(function(res) { facilityRenderViolationList_(facility, `${p}-mgr-violation-list`, res); });
+  }
+</script>

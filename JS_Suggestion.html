@@ -1,0 +1,61 @@
+<script>
+  // =========================================================================
+  // 건의함 모듈 (학생 제출은 실명, 조회는 박정환 계정 전용)
+  // =========================================================================
+  function loadSuggestionStudentView() {
+    const container = document.getElementById('suggestion-student-container');
+    container.innerHTML = `<div class="card" style="text-align:center; color:#999;">불러오는 중입니다...</div>`;
+    if (currentUser.role !== '학생') {
+      container.innerHTML = `<div class="card" style="text-align:center; color:#666;">건의함은 학생 계정으로만 작성할 수 있습니다.</div>`;
+      return;
+    }
+    gsRun('getMySuggestions', currentUser.token).then(function(res) { renderSuggestionStudentView(res); });
+  }
+
+  function renderSuggestionStudentView(res) {
+    const container = document.getElementById('suggestion-student-container');
+    let html = `<div class="card" style="border-top:5px solid #455a64;"><h3 style="margin-top:0; color:#263238;">✉️ 체육인성부에 건의하기</h3><p style="font-size:0.85em; color:#888; margin-top:-8px;">이 홈페이지는 여러분이 함께 만들어가는 공간입니다. 바뀌었으면 하는 점을 자유롭게 남겨주세요.<br>익명이 아닌 실명(학번·이름)으로 담당 체육교사에게만 전달됩니다.</p><textarea id="suggestion-content" class="input-field" placeholder="건의하고 싶은 내용을 적어주세요" style="height:120px; resize:vertical;"></textarea><button class="btn-primary" style="background:#455a64;" onclick="submitSuggestionNow()">건의 제출하기</button></div>`;
+
+    html += `<div class="card" style="border-top:5px solid #455a64;"><h3 style="margin-top:0; color:#263238;">📜 내가 제출한 건의 이력</h3>`;
+    if (!res.success || res.list.length === 0) {
+      html += `<div style="color:#999; text-align:center; padding:15px;">아직 제출한 건의사항이 없습니다.</div>`;
+    } else {
+      res.list.forEach(s => { html += `<div style="border-bottom:1px solid #eee; padding:10px 0; font-size:0.92em; color:#444; white-space:pre-wrap;">${escapeHtml(s.content)}<div style="font-size:0.8em; color:#999; margin-top:4px;">${escapeHtml(s.date)}</div></div>`; });
+    }
+    html += `</div>`;
+
+    container.innerHTML = html;
+  }
+
+  function submitSuggestionNow() {
+    const content = document.getElementById('suggestion-content').value.trim();
+    if (!content) { showAlert('건의 내용을 입력하세요.'); return; }
+    gsRun('submitSuggestion', content, currentUser.token).then(function(res) {
+      showAlert(res.message);
+      if (res.success) loadSuggestionStudentView();
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // 관리자(박정환 전용) - 건의함 조회
+  // -------------------------------------------------------------------------
+  function loadSuggestionAdmin() {
+    const container = document.getElementById('suggestion-admin-list');
+    container.innerHTML = `<div style="text-align:center; color:#999; padding:15px;">불러오는 중입니다...</div>`;
+    gsRun('getSuggestions', currentUser.token).then(function(res) {
+      if (!res.success) { container.innerHTML = `<div style="color:red; text-align:center; padding:15px;">${escapeHtml(res.message)}</div>`; return; }
+      if (res.list.length === 0) { container.innerHTML = `<div style="color:#999; text-align:center; padding:15px;">아직 접수된 건의사항이 없습니다.</div>`; return; }
+      let html = '';
+      res.list.forEach(s => {
+        html += `<div style="border-bottom:1px solid #eee; padding:14px 0;"><div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px; margin-bottom:6px;"><div style="font-weight:bold; color:#263238;">${escapeHtml(s.name)} (${escapeHtml(s.studentId)})</div><div style="font-size:0.8em; color:#999;">${escapeHtml(s.date)}</div></div><div style="color:#444; white-space:pre-wrap; font-size:0.95em; line-height:1.5; margin-bottom:8px;">${escapeHtml(s.content)}</div><button class="btn-small" style="background:#999; padding:5px 12px; font-size:0.85em;" onclick="deleteSuggestionNow('${escapeHtml(s.id)}')">삭제(처리완료)</button></div>`;
+      });
+      container.innerHTML = html;
+    });
+  }
+
+  function deleteSuggestionNow(suggestionId) {
+    showConfirm('이 건의사항을 삭제(처리완료 처리)하시겠습니까?', function() {
+      gsRun('deleteSuggestion', suggestionId, currentUser.token).then(function(res) { showAlert(res.message); if (res.success) loadSuggestionAdmin(); });
+    });
+  }
+</script>

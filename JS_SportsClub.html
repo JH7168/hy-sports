@@ -1,0 +1,134 @@
+<script>
+  // =========================================================================
+  // 스포츠클럽 모듈 (축구/농구/배구/배드민턴부 명단 + 자유게시판)
+  // =========================================================================
+  const SPORTSCLUB_PREFIX = { SOCCER: 'sportsclub-soccer', BASKETBALL: 'sportsclub-basketball', VOLLEYBALL: 'sportsclub-volleyball', BADMINTON: 'sportsclub-badminton' };
+  const SPORTSCLUB_KOR = { SOCCER: '축구부', BASKETBALL: '농구부', VOLLEYBALL: '배구부', BADMINTON: '배드민턴부' };
+  let sportsClubEditingPostId = null;
+
+  // -------------------------------------------------------------------------
+  // 학생/교사 화면 - 부원 전용 자유게시판
+  // -------------------------------------------------------------------------
+  function loadSportsClubView(club) {
+    const p = SPORTSCLUB_PREFIX[club];
+    const container = document.getElementById(`${p}-container`);
+    container.innerHTML = `<div class="card" style="text-align:center; color:#999;">불러오는 중입니다...</div>`;
+    gsRun('getSportsClubPosts', club, currentUser.token).then(function(res) { renderSportsClubView(club, res); });
+  }
+
+  function renderSportsClubView(club, res) {
+    const p = SPORTSCLUB_PREFIX[club];
+    const container = document.getElementById(`${p}-container`);
+    if (!res.success) { container.innerHTML = `<div class="card" style="text-align:center; color:#666;">${escapeHtml(res.message)}</div>`; return; }
+
+    let html = `<div class="card" style="border-top:5px solid #3949ab;"><h3 style="margin-top:0; color:#283593;">✍️ 새 글 쓰기</h3><input type="text" id="${p}-post-title" class="input-field" placeholder="제목"><textarea id="${p}-post-content" class="input-field" placeholder="자유롭게 작성해보세요 (훈련 일지, 공지, 잡담 등)" style="height:90px; resize:vertical;"></textarea><button class="btn-primary" style="background:#3949ab;" onclick="sportsClubSubmitPost('${club}')">등록</button></div>`;
+
+    html += `<div class="card" style="border-top:5px solid #3949ab;"><h3 style="margin-top:0; color:#283593;">📋 ${escapeHtml(SPORTSCLUB_KOR[club])} 게시판</h3>`;
+    if (res.list.length === 0) {
+      html += `<div style="color:#999; text-align:center; padding:15px;">아직 등록된 글이 없습니다. 첫 글을 남겨보세요!</div>`;
+    } else {
+      res.list.forEach(post => {
+        html += `<div id="${p}-post-${post.id}" style="border-bottom:1px solid #eee; padding:14px 0;">`;
+        html += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:6px;"><div style="font-weight:bold; color:#283593; font-size:1.05em;">${escapeHtml(post.title)}</div><div style="font-size:0.8em; color:#999;">${escapeHtml(post.authorName)} · ${escapeHtml(post.updatedAt)}</div></div>`;
+        html += `<div style="color:#444; white-space:pre-wrap; font-size:0.95em; line-height:1.5;">${escapeHtml(post.content)}</div>`;
+        if (post.mine || currentUser.role === '체육교사') {
+          html += `<div style="margin-top:8px; display:flex; gap:6px;"><button class="btn-small" style="background:#607d8b; padding:5px 12px; font-size:0.85em;" onclick="sportsClubStartEdit('${club}', '${escapeHtml(post.id)}', ${JSON.stringify(post.title)}, ${JSON.stringify(post.content)})">수정</button><button class="btn-small" style="background:#d32f2f; padding:5px 12px; font-size:0.85em;" onclick="sportsClubDeletePost('${club}', '${escapeHtml(post.id)}')">삭제</button></div>`;
+        }
+        html += `</div>`;
+      });
+    }
+    html += `</div>`;
+
+    container.innerHTML = html;
+  }
+
+  function sportsClubSubmitPost(club) {
+    const p = SPORTSCLUB_PREFIX[club];
+    const title = document.getElementById(`${p}-post-title`).value.trim();
+    const content = document.getElementById(`${p}-post-content`).value.trim();
+    if (!title || !content) { showAlert('제목과 내용을 모두 입력하세요.'); return; }
+    gsRun('createSportsClubPost', club, title, content, currentUser.token).then(function(res) {
+      showAlert(res.message);
+      if (res.success) loadSportsClubView(club);
+    });
+  }
+
+  function sportsClubStartEdit(club, postId, title, content) {
+    const p = SPORTSCLUB_PREFIX[club];
+    const el = document.getElementById(`${p}-post-${postId}`);
+    if (!el) return;
+    el.innerHTML = `<input type="text" id="${p}-edit-title-${postId}" class="input-field" value="${escapeHtml(title)}" style="margin-bottom:8px;"><textarea id="${p}-edit-content-${postId}" class="input-field" style="height:90px; resize:vertical; margin-bottom:8px;">${escapeHtml(content)}</textarea><div style="display:flex; gap:8px;"><button class="btn-primary" style="background:#3949ab; margin:0; flex:1;" onclick="sportsClubSaveEdit('${club}', '${postId}')">저장</button><button class="btn-primary" style="background:#999; margin:0; flex:1;" onclick="loadSportsClubView('${club}')">취소</button></div>`;
+  }
+
+  function sportsClubSaveEdit(club, postId) {
+    const p = SPORTSCLUB_PREFIX[club];
+    const title = document.getElementById(`${p}-edit-title-${postId}`).value.trim();
+    const content = document.getElementById(`${p}-edit-content-${postId}`).value.trim();
+    if (!title || !content) { showAlert('제목과 내용을 모두 입력하세요.'); return; }
+    gsRun('updateSportsClubPost', club, postId, title, content, currentUser.token).then(function(res) {
+      showAlert(res.message);
+      if (res.success) loadSportsClubView(club);
+    });
+  }
+
+  function sportsClubDeletePost(club, postId) {
+    showConfirm('이 글을 삭제하시겠습니까?', function() {
+      gsRun('deleteSportsClubPost', club, postId, currentUser.token).then(function(res) {
+        showAlert(res.message);
+        if (res.success) loadSportsClubView(club);
+      });
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // 관리자 - 부원 명단 관리 (부서 선택 후 관리)
+  // -------------------------------------------------------------------------
+  let sportsClubAdminSelected = 'SOCCER';
+  let sportsClubMgrVerifiedStudent = null;
+
+  function sportsClubAdminChangeClub() {
+    sportsClubAdminSelected = document.getElementById('sportsclub-admin-select').value;
+    loadSportsClubAdmin();
+  }
+
+  function loadSportsClubAdmin() {
+    const club = sportsClubAdminSelected;
+    const classSel = document.getElementById('sportsclub-add-class'), numSel = document.getElementById('sportsclub-add-num');
+    if (classSel && classSel.options.length <= 1) { for (let i = 1; i <= 8; i++) classSel.innerHTML += `<option value="${i}">${i}반</option>`; }
+    if (numSel && numSel.options.length <= 1) { for (let i = 1; i <= 25; i++) numSel.innerHTML += `<option value="${i}">${i}번</option>`; }
+    document.getElementById('sportsclub-add-name').value = '';
+    document.getElementById('btn-sportsclub-add').disabled = true;
+    sportsClubMgrVerifiedStudent = null;
+
+    const tbody = document.getElementById('sportsclub-mgr-tbody');
+    tbody.innerHTML = `<tr><td colspan="4" style="padding:20px; color:#999;">불러오는 중입니다...</td></tr>`;
+    gsRun('getSportsClubMembers', club, currentUser.token).then(function(res) {
+      if (!res.success || res.list.length === 0) { tbody.innerHTML = `<tr><td colspan="4" style="padding:20px; color:#999;">등록된 부원이 없습니다.</td></tr>`; return; }
+      tbody.innerHTML = '';
+      res.list.forEach(s => {
+        tbody.innerHTML += `<tr style="border-bottom:1px solid #eee;"><td style="padding:8px;">${escapeHtml(s.id)}</td><td style="padding:8px; font-weight:bold;">${escapeHtml(s.name)}</td><td style="padding:8px;">${escapeHtml(s.grade)}학년</td><td style="padding:8px;"><button class="btn-small" style="background:#d32f2f;" onclick="sportsClubRemoveMember('${escapeHtml(s.id)}')">삭제</button></td></tr>`;
+      });
+    });
+  }
+
+  function sportsClubSearchStudent() {
+    const g = document.getElementById('sportsclub-add-grade').value, c = document.getElementById('sportsclub-add-class').value, n = document.getElementById('sportsclub-add-num').value;
+    const nameInput = document.getElementById('sportsclub-add-name'), addBtn = document.getElementById('btn-sportsclub-add');
+    if (!g || !c || !n) { showAlert('학년, 반, 번호를 모두 선택하세요.'); return; }
+    nameInput.value = '조회 중...'; addBtn.disabled = true; sportsClubMgrVerifiedStudent = null;
+    gsRun('findStudent', g, c, n).then(function(res) {
+      if (res.success) { nameInput.value = res.name; sportsClubMgrVerifiedStudent = g + c.toString().padStart(2, '0') + n.toString().padStart(2, '0'); addBtn.disabled = false; } else { nameInput.value = ''; showAlert(res.message); }
+    });
+  }
+
+  function sportsClubAddMember() {
+    if (!sportsClubMgrVerifiedStudent) return;
+    gsRun('addSportsClubMember', sportsClubAdminSelected, sportsClubMgrVerifiedStudent, currentUser.token).then(function(res) { showAlert(res.message); if (res.success) loadSportsClubAdmin(); });
+  }
+
+  function sportsClubRemoveMember(studentId) {
+    showConfirm('정말 부원 명단에서 삭제하시겠습니까?', function() {
+      gsRun('removeSportsClubMember', sportsClubAdminSelected, studentId, currentUser.token).then(function(res) { showAlert(res.message); loadSportsClubAdmin(); });
+    });
+  }
+</script>

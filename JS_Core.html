@@ -62,23 +62,26 @@
   // =========================================================================
   // 초기화 및 이벤트 리스너
   // =========================================================================
-  // GAS 웹앱이 iframe 안에서 렌더링될 때, 클릭이 iframe에만 포커스를 주고
-  // 실제 입력창(input/select/textarea)까지 전달되지 않아 첫 클릭에는
-  // 타이핑이 안 되는 경우가 있다. 클릭한 요소가 실제로 포커스를 받지
-  // 못했다면 즉시 강제로 포커스를 넘겨 매번 다시 클릭해야 하는 문제를 막는다.
-  document.addEventListener('click', function(e) {
+  // GAS 웹앱은 iframe 안에서 렌더링되어, 탭/클릭이 iframe 자체에만 포커스를
+  // 주고 실제 입력창(input/select/textarea)까지는 전달되지 않는 경우가 있다.
+  // (모바일 사파리/크롬에서 특히 심함: 첫 탭은 반응 없고 다른 칸을 눌렀다
+  // 돌아오면 됨) document.activeElement가 이미 그 요소를 가리켜도 실제로는
+  // 키보드가 뜨지 않는 "유령 포커스" 상태일 수 있으므로 조건 없이 매번
+  // 강제로 focus()를 다시 호출한다. click과 touchend를 모두 잡아 안드로이드
+  // /아이폰 이벤트 차이에 대응한다.
+  function forceFieldFocus(e) {
     const t = e.target;
-    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT') && document.activeElement !== t) {
-      t.focus();
-    }
-  });
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) t.focus();
+  }
+  document.addEventListener('touchend', forceFieldFocus, { passive: true });
+  document.addEventListener('click', forceFieldFocus);
 
   window.onload = function() {
-    // GAS 웹앱은 iframe 안에서 렌더링되어, 첫 클릭이 iframe에만 포커스를 주고
-    // 실제 입력창까지 전달되지 않는 경우가 있다(그래서 다른 칸을 눌렀다가
-    // 돌아와야 입력되는 것처럼 보임). 로드 시점에 미리 포커스를 넘겨준다.
+    // 최초 진입 시 iframe이 "잠들어" 있어 첫 탭이 씹히는 것을 막기 위해
+    // 창 단위 포커스를 미리 깨워둔다(특정 입력창을 강제로 focus하면 오히려
+    // iOS에서 키보드는 안 뜨는데 activeElement만 바뀌는 유령 포커스가 생겨
+    // 위 리스너가 오작동하므로, 입력창 자체는 자동 포커스하지 않는다).
     window.focus();
-    document.getElementById('login-id')?.focus();
 
     const classSelect = document.getElementById('reg-class');
     const numSelect = document.getElementById('reg-num');
@@ -86,15 +89,10 @@
     if (numSelect) { for(let i=1; i<=25; i++) numSelect.innerHTML += `<option value="${i}">${i}번</option>`; }
 
     populateYearSelects();
-
-    function handleLoginEnter(event) { if (event.key === 'Enter') attemptLogin(); }
-    document.getElementById('login-id')?.addEventListener('keypress', handleLoginEnter);
-    document.getElementById('login-pw')?.addEventListener('keypress', handleLoginEnter);
-
-    function handleSignupEnter(event) { if (event.key === 'Enter') attemptSignup(); }
-    document.getElementById('reg-pw')?.addEventListener('keypress', handleSignupEnter);
-    document.getElementById('reg-pw-confirm')?.addEventListener('keypress', handleSignupEnter);
-    document.getElementById('reg-secret')?.addEventListener('keypress', handleSignupEnter);
+    // 로그인/회원가입 입력창의 Enter 제출은 이제 <form onsubmit>이 처리한다
+    // (아이디/비밀번호 입력창을 <form>으로 감싸면 브라우저가 정상적인
+    // 로그인 폼으로 인식해, 모바일에서 자동완성/비밀번호 관리자 제안창이
+    // 첫 탭을 가로채던 문제도 함께 줄어든다).
   };
 
   // =========================================================================
@@ -124,13 +122,21 @@
   }
 
   function switchTab(tabName, parentId = null) {
-    const tabs = ['home', 'paps', 'sports', 'friendly', 'sportsclub-soccer', 'sportsclub-basketball', 'sportsclub-volleyball', 'sportsclub-badminton', 'afterschool-main', 'afterschool-small', 'lunch-gym', 'lunch-field', 'lunch-futsal'];
+    const tabs = ['home', 'paps', 'sports', 'friendly', 'sportsclub-soccer', 'sportsclub-basketball', 'sportsclub-volleyball', 'sportsclub-badminton', 'afterschool-main', 'afterschool-small', 'lunch-gym', 'lunch-field', 'lunch-futsal', 'suggestion'];
     tabs.forEach(t => { const content = document.getElementById('content-' + t); if(content) content.classList.add('hidden'); });
-    const mainTabs = ['tab-home', 'tab-paps', 'tab-sports', 'tab-friendly', 'tab-sportsclub', 'tab-afterschool', 'tab-lunch'];
+    const mainTabs = ['tab-home', 'tab-paps', 'tab-sports', 'tab-friendly', 'tab-sportsclub', 'tab-afterschool', 'tab-lunch', 'tab-suggestion'];
     mainTabs.forEach(t => { const tab = document.getElementById(t); if(tab) tab.classList.remove('active'); });
     const targetContent = document.getElementById('content-' + tabName); if(targetContent) targetContent.classList.remove('hidden');
     if (parentId) { const p = document.getElementById(parentId); if (p) p.classList.add('active'); } else { const t = document.getElementById('tab-' + tabName); if(t) t.classList.add('active'); }
     if (tabName === 'afterschool-small') loadPhysPrepStudentView();
+    if (tabName === 'lunch-futsal') loadFacilityStudentView('FUTSAL');
+    if (tabName === 'lunch-gym') loadFacilityStudentView('GYM');
+    if (tabName === 'lunch-field') loadFacilityStudentView('FIELD');
+    if (tabName === 'suggestion') loadSuggestionStudentView();
+    if (tabName.indexOf('sportsclub-') === 0) {
+      const clubMap = { 'sportsclub-soccer': 'SOCCER', 'sportsclub-basketball': 'BASKETBALL', 'sportsclub-volleyball': 'VOLLEYBALL', 'sportsclub-badminton': 'BADMINTON' };
+      loadSportsClubView(clubMap[tabName]);
+    }
     window.scrollTo(0, 0);
   }
 
@@ -138,10 +144,10 @@
   function closePETeacherView() { document.getElementById('pe-main-view')?.classList.add('hidden'); document.getElementById('main-view')?.classList.remove('hidden'); switchTab('home'); }
 
   function switchPETab(peTabName) {
-    const peTabs = ['pe-home', 'pe-inventory-status', 'pe-purchase-list', 'pe-physprep-roster', 'pe-physprep-events', 'pe-physprep-input', 'pe-physprep-ranking', 'pe-paps-manage', 'pe-sports-manage', 'pe-lunch-manage', 'pe-board-manage'];
+    const peTabs = ['pe-home', 'pe-inventory-status', 'pe-purchase-list', 'pe-physprep-roster', 'pe-physprep-events', 'pe-physprep-input', 'pe-physprep-ranking', 'pe-paps-manage', 'pe-sports-manage', 'pe-facility-futsal', 'pe-facility-gym', 'pe-facility-field', 'pe-facility-violations', 'pe-sportsclub-manage', 'pe-board-manage', 'pe-suggestion-manage'];
     peTabs.forEach(t => { const c = document.getElementById('content-' + t); if(c) c.classList.add('hidden'); });
 
-    const mainBtns = ['tab-pe-home', 'tab-pe-inventory-manage', 'tab-pe-physprep-manage', 'tab-pe-paps-manage', 'tab-pe-sports-manage', 'tab-pe-lunch-manage', 'tab-pe-board-manage'];
+    const mainBtns = ['tab-pe-home', 'tab-pe-inventory-manage', 'tab-pe-physprep-manage', 'tab-pe-paps-manage', 'tab-pe-sports-manage', 'tab-pe-lunch-manage', 'tab-pe-sportsclub-manage', 'tab-pe-board-manage', 'tab-pe-suggestion-manage'];
     mainBtns.forEach(b => { const btn = document.getElementById(b); if(btn) btn.classList.remove('active'); });
 
     const targetC = document.getElementById('content-' + peTabName); if(targetC) targetC.classList.remove('hidden');
@@ -150,6 +156,8 @@
       document.getElementById('tab-pe-inventory-manage')?.classList.add('active');
     } else if(peTabName.indexOf('pe-physprep-') === 0) {
       document.getElementById('tab-pe-physprep-manage')?.classList.add('active');
+    } else if(peTabName.indexOf('pe-facility-') === 0) {
+      document.getElementById('tab-pe-lunch-manage')?.classList.add('active');
     } else {
       document.getElementById('tab-' + peTabName)?.classList.add('active');
     }
@@ -161,6 +169,12 @@
     if (peTabName === 'pe-physprep-events') loadPhysPrepEventsAdmin();
     if (peTabName === 'pe-physprep-input') loadPhysPrepEntryForm();
     if (peTabName === 'pe-physprep-ranking') loadPhysPrepRankingAdmin();
+    if (peTabName === 'pe-facility-futsal') openFacilityAdminTab('FUTSAL');
+    if (peTabName === 'pe-facility-gym') openFacilityAdminTab('GYM');
+    if (peTabName === 'pe-facility-field') openFacilityAdminTab('FIELD');
+    if (peTabName === 'pe-facility-violations') loadAllFacilityViolationsAdmin();
+    if (peTabName === 'pe-sportsclub-manage') loadSportsClubAdmin();
+    if (peTabName === 'pe-suggestion-manage') loadSuggestionAdmin();
     window.scrollTo(0, 0);
   }
 
@@ -227,6 +241,9 @@
         const msg = document.getElementById('welcome-msg'); if(msg) msg.innerText = `환영합니다, ${res.name} ${res.role === '학생' ? '학생' : '선생님'}!`;
         if (res.role === '체육교사') document.getElementById('tab-pe-teacher')?.classList.remove('hidden');
         else document.getElementById('tab-pe-teacher')?.classList.add('hidden');
+        // 건의함 관리 메뉴는 체육교사 중 아이디가 정확히 "박정환"인 계정에만 노출된다.
+        if (res.role === '체육교사' && res.id === '박정환') document.getElementById('tab-pe-suggestion-manage')?.classList.remove('hidden');
+        else document.getElementById('tab-pe-suggestion-manage')?.classList.add('hidden');
         loadBoard(); loadPaps(); switchTab('home');
       } else { const lmsg = document.getElementById('login-msg'); if(lmsg) lmsg.innerText = res.message; }
     }).catch(function() { if(loginBtn) { loginBtn.innerText = "로그인"; loginBtn.disabled = false; } });
@@ -235,6 +252,8 @@
   function logout() {
     if (currentUser?.token) gsRun('invalidateSession', currentUser.token).catch(function() {});
     currentUser = null; document.getElementById('login-id').value = ''; document.getElementById('login-pw').value = '';
-    document.getElementById('tab-pe-teacher')?.classList.add('hidden'); toggleView('login-view'); switchTab('home');
+    document.getElementById('tab-pe-teacher')?.classList.add('hidden');
+    document.getElementById('tab-pe-suggestion-manage')?.classList.add('hidden');
+    toggleView('login-view'); switchTab('home');
   }
 </script>
