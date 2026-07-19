@@ -1,0 +1,135 @@
+<script>
+  // =========================================================================
+  // PAPS 모듈
+  // =========================================================================
+  function loadPaps() {
+    if (currentUser.role === '학생') {
+      let html = `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom: 2px solid #1e3c72; padding-bottom:10px;"><h3 style="margin:0; color:#1e3c72;">📊 나의 PAPS 기록 조회</h3><select id="student-year-select" onchange="changeStudentYear()" style="padding:6px 12px; border-radius:6px; border:2px solid #1e3c72; font-weight:bold; font-size:0.95em; outline:none; font-family:'NanumSquareRound';">${buildYearOptions()}</select></div><div id="paps-result-container"></div>`;
+      document.getElementById('paps-list').innerHTML = html;
+      fetchAndRenderPaps(currentUser.id, 'paps-result-container', CURRENT_ACADEMIC_YEAR);
+    } else if (currentUser.role === '체육교사') {
+      let classOptions = '<option value="">반</option>'; for(let i=1; i<=8; i++) classOptions += `<option value="${i}">${i}반</option>`;
+      let numOptions = '<option value="">번호</option>'; for(let i=1; i<=25; i++) numOptions += `<option value="${i}">${i}번</option>`;
+      let html = `<div class="box-ui" style="margin-top:0; margin-bottom:20px; border-left: 4px solid #1e3c72; padding: 15px;"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:10px;"><h3 style="margin:0; color:#1e3c72; font-size:1.1em;">🔍 학생 개별 조회 (마스터)</h3><select id="paps-search-year" onchange="autoVerifyStudent()" style="padding:6px 10px; border-radius:6px; border:1px solid #1e3c72; font-weight:bold; font-size:0.9em; outline:none; font-family:'NanumSquareRound';">${buildYearOptions()}</select></div><div style="font-size:0.85em; color:#666; margin-bottom:12px; word-break:keep-all;">학년, 반, 번호를 선택하면 자동으로 이름이 표출됩니다.</div><div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;"><select id="paps-search-grade" class="input-field" style="flex:1; min-width: 60px; padding: 8px; margin: 0; font-size: 0.95em;" onchange="autoVerifyStudent()"><option value="">학년</option><option value="1">1학년</option><option value="2">2학년</option><option value="3">3학년</option></select><select id="paps-search-class" class="input-field" style="flex:1; min-width: 60px; padding: 8px; margin: 0; font-size: 0.95em;" onchange="autoVerifyStudent()">${classOptions}</select><select id="paps-search-num" class="input-field" style="flex:1; min-width: 60px; padding: 8px; margin: 0; font-size: 0.95em;" onchange="autoVerifyStudent()">${numOptions}</select><input type="text" id="paps-search-name" placeholder="이름 표출" readonly style="flex: 1.5; min-width: 80px; background: #e8f0fe; padding: 8px; margin: 0; text-align: center; font-weight: bold; color: #1e3c72; font-size: 0.95em; border: 1px solid #ccc; border-radius: 6px;"><button class="btn-primary" id="btn-paps-search" onclick="papsLoadTarget()" disabled style="flex: 1; min-width: 70px; padding: 8px; margin: 0; font-size: 0.95em;">조회하기</button></div></div><div id="paps-result-container"></div>`;
+      document.getElementById('paps-list').innerHTML = html;
+    } else { document.getElementById('paps-list').innerHTML = "<div class='card' style='text-align:center;'>PAPS 조회 권한이 없습니다.</div>"; }
+  }
+
+  function changeStudentYear() { fetchAndRenderPaps(currentUser.id, 'paps-result-container', document.getElementById('student-year-select').value); }
+
+  function autoVerifyStudent() {
+    const g = document.getElementById('paps-search-grade').value, c = document.getElementById('paps-search-class').value, n = document.getElementById('paps-search-num').value;
+    const nameInput = document.getElementById('paps-search-name'), searchBtn = document.getElementById('btn-paps-search');
+    if(!g || !c || !n) { nameInput.value = ""; searchBtn.disabled = true; papsTargetId = ""; return; }
+    nameInput.value = "조회 중..."; searchBtn.disabled = true;
+    gsRun('findStudent', g, c, n).then(function(res) {
+      if(res.success) { nameInput.value = res.name; papsTargetId = g + c.toString().padStart(2, '0') + n.toString().padStart(2, '0'); searchBtn.disabled = false; } else { nameInput.value = "명단 없음"; papsTargetId = ""; searchBtn.disabled = true; }
+    });
+  }
+
+  function papsLoadTarget() { if(papsTargetId) fetchAndRenderPaps(papsTargetId, 'paps-result-container', document.getElementById('paps-search-year').value); }
+
+  function fetchAndRenderPaps(studentId, containerId, year) {
+    year = year || CURRENT_ACADEMIC_YEAR;
+    document.getElementById(containerId).innerHTML = "<div style='text-align:center; padding:40px;'>해당 년도 데이터 및 차트를 불러오는 중입니다...</div>";
+    gsRun('getStudentPapsDetail', studentId, year, currentUser.token).then(function(res) {
+      if(!res.success) { document.getElementById(containerId).innerHTML = `<div style='text-align:center; color:red; font-weight:bold; padding:20px;'>${escapeHtml(res.message)}</div>`; return; }
+      const d = res.papsData, st = d.stats, rk = d.classRanks;
+      let html = `<div class="card" style="border-top: 6px solid #ff9800; background: #fffdf7; margin-bottom: 25px; padding: 20px;"><h3 style="margin-top: 0; margin-bottom: 15px; color: #ff9800; text-align: center; font-size: 1.25em; letter-spacing: -0.5px;">🏆 ${year}학년도 [ 우리 반 종목별 순위 ]</h3><p style="text-align:center; font-size:0.88em; color:#666; margin-top:-10px; margin-bottom:15px;">(우리 <b>${d.targetClass}반</b>의 점수 평균 순위)</p><div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; text-align: center;"><div style="background: #fff; padding: 10px 5px; border-radius: 8px; border: 1px solid #ffe0b2;"><div style="font-size: 0.8em; color: #777; font-weight: bold;">종합점수 순위</div><div style="font-size: clamp(1rem, 4vw, 1.3em); font-weight: bold; color: #e65100; margin-top: 5px;">${rk.total.rank}등 <span style="font-size:0.65em; color:#aaa; font-weight:normal;">/ ${rk.total.totalClasses}반</span></div></div><div style="background: #fff; padding: 10px 5px; border-radius: 8px; border: 1px solid #ffe0b2;"><div style="font-size: 0.8em; color: #4caf50; font-weight: bold;">심폐지구력</div><div style="font-size: clamp(1rem, 4vw, 1.3em); font-weight: bold; color: #1b5e20; margin-top: 5px;">${rk.cardio.rank}등 <span style="font-size:0.65em; color:#aaa; font-weight:normal;">/ ${rk.cardio.totalClasses}반</span></div></div><div style="background: #fff; padding: 10px 5px; border-radius: 8px; border: 1px solid #ffe0b2;"><div style="font-size: 0.8em; color: #e91e63; font-weight: bold;">유연성</div><div style="font-size: clamp(1rem, 4vw, 1.3em); font-weight: bold; color: #880e4f; margin-top: 5px;">${rk.flex.rank}등 <span style="font-size:0.65em; color:#aaa; font-weight:normal;">/ ${rk.flex.totalClasses}반</span></div></div><div style="background: #fff; padding: 10px 5px; border-radius: 8px; border: 1px solid #ffe0b2; margin-top: 5px;"><div style="font-size: 0.8em; color: #ff9800; font-weight: bold;">근력·근지구력</div><div style="font-size: clamp(1rem, 4vw, 1.3em); font-weight: bold; color: #e65100; margin-top: 5px;">${rk.strength.rank}등 <span style="font-size:0.65em; color:#aaa; font-weight:normal;">/ ${rk.strength.totalClasses}반</span></div></div><div style="background: #fff; padding: 10px 5px; border-radius: 8px; border: 1px solid #ffe0b2; margin-top: 5px;"><div style="font-size: 0.8em; color: #2196f3; font-weight: bold;">순발력</div><div style="font-size: clamp(1rem, 4vw, 1.3em); font-weight: bold; color: #0d47a1; margin-top: 5px;">${rk.power.rank}등 <span style="font-size:0.65em; color:#aaa; font-weight:normal;">/ ${rk.power.totalClasses}반</span></div></div><div style="background: #fff; padding: 10px 5px; border-radius: 8px; border: 1px solid #ffe0b2; margin-top: 5px;"><div style="font-size: 0.8em; color: #9c27b0; font-weight: bold;">비만(BMI)</div><div style="font-size: clamp(1rem, 4vw, 1.3em); font-weight: bold; color: #4a148c; margin-top: 5px;">${rk.bmi.rank}등 <span style="font-size:0.65em; color:#aaa; font-weight:normal;">/ ${rk.bmi.totalClasses}반</span></div></div></div></div>`;
+      html += `<div class="card" style="margin-bottom: 25px; text-align: center;"><h3 style="margin-top: 0; color: #1e3c72; border-bottom: 2px solid #1e3c72; padding-bottom: 5px;">🕸️ 나의 체력 밸런스 분석</h3><p style="font-size: 0.82em; color: #666; word-break:keep-all;">🔵내 점수 | 🟢반평균 점수 | 🟣학년평균 점수</p><div style="position: relative; max-width: 450px; margin: 0 auto;"><canvas id="papsRadarChart-${year}"></canvas></div></div>`;
+      html += `<div style="background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); color:white; padding:22px; border-radius:12px; margin-bottom:20px; text-align:center; box-shadow: 0 4px 10px rgba(0,0,0,0.1);"><h3 style="margin:0; font-size:1.35em;">건강체력평가 종합점수</h3><div style="font-size:2.6em; font-weight:bold; margin:8px 0;">${d.totalScore}점</div><div style="display:inline-block; background:rgba(255,255,255,0.2); padding:4px 15px; border-radius:20px; font-weight:bold; margin-bottom:15px;">종합 ${d.totalGrade}등급</div><div style="background: rgba(0, 0, 0, 0.25); padding: 12px; border-radius: 8px; font-size: 0.93em; line-height: 1.6; text-align: left; max-width: 420px; margin: 0 auto; word-break: keep-all;">📢 <b>학년 평균 비교:</b> ${st.totalScore.school.avg}점 (전교 <b>${st.totalScore.school.rank}등</b> / ${st.totalSchoolStudents}명)<br>🏫 <b>반평균 비교:</b> ${st.totalScore.class.avg}점 (반 <b>${st.totalScore.class.rank}등</b> / ${st.totalClassStudents}명)</div></div>`;
+      html += `<div style="display:grid; grid-template-columns: 1fr 1fr; gap:clamp(8px, 2vw, 15px); margin-bottom:30px;"><div class="card" style="margin-bottom:0; text-align:center; padding:15px 5px; border-top:4px solid #4caf50;"><h4 style="margin-top:0; color:#555; line-height:1.4; font-size:clamp(0.8rem, 3.5vw, 1rem);">🏃 심폐지구력<br>(왕복오래달리기)</h4><div style="background:#1e3c72; color:white; padding:9px 2px; border-radius:8px; margin-top:12px; font-size:clamp(0.75rem, 3.1vw, 1.05rem); font-weight:bold;">내 기록: ${d.cardioRec}회 (${d.cardioScore}점, ${d.cardioGrade}등급)</div><div style="background:#f0f2f5; padding:8px 6px; border-radius:8px; margin-top:10px; font-size:0.83em; color:#444; text-align:left; line-height:1.5;">• 학년평균: ${st.cardio.school.avg}회 (전교 ${st.cardio.school.rank}등)<br>• 반평균: ${st.cardio.class.avg}회 (반 ${st.cardio.class.rank}등)</div></div><div class="card" style="margin-bottom:0; text-align:center; padding:15px 5px; border-top:4px solid #e91e63;"><h4 style="margin-top:0; color:#555; line-height:1.4; font-size:clamp(0.8rem, 3.5vw, 1rem);">🤸 유연성<br>(앉아윗몸앞으로굽히기)</h4><div style="background:#1e3c72; color:white; padding:9px 2px; border-radius:8px; margin-top:12px; font-size:clamp(0.75rem, 3.1vw, 1.05rem); font-weight:bold;">내 기록: ${d.flexRec}cm (${d.flexScore}점, ${d.flexGrade}등급)</div><div style="background:#f0f2f5; padding:8px 6px; border-radius:8px; margin-top:10px; font-size:0.83em; color:#444; text-align:left; line-height:1.5;">• 학년평균: ${st.flex.school.avg}cm (전교 ${st.flex.school.rank}등)<br>• 반평균: ${st.flex.class.avg}cm (반 ${st.flex.class.rank}등)</div></div><div class="card" style="margin-bottom:0; text-align:center; padding:15px 5px; border-top:4px solid #ff9800;"><h4 style="margin-top:0; color:#555; line-height:1.4; font-size:clamp(0.8rem, 3.5vw, 1rem);">💪 근력·근지구력<br>(팔굽혀펴기)</h4><div style="background:#1e3c72; color:white; padding:9px 2px; border-radius:8px; margin-top:12px; font-size:clamp(0.75rem, 3.1vw, 1.05rem); font-weight:bold;">내 기록: ${d.strengthRec}회 (${d.strengthScore}점, ${d.strengthGrade}등급)</div><div style="background:#f0f2f5; padding:8px 6px; border-radius:8px; margin-top:10px; font-size:0.83em; color:#444; text-align:left; line-height:1.5;">• 학년평균: ${st.strength.school.avg}회 (전교 ${st.strength.school.rank}등)<br>• 반평균: ${st.strength.class.avg}회 (반 ${st.strength.class.rank}등)</div></div><div class="card" style="margin-bottom:0; text-align:center; padding:15px 5px; border-top:4px solid #2196f3;"><h4 style="margin-top:0; color:#555; line-height:1.4; font-size:clamp(0.8rem, 3.5vw, 1rem);">⚡ 순발력<br>(제자리멀리뛰기)</h4><div style="background:#1e3c72; color:white; padding:9px 2px; border-radius:8px; margin-top:12px; font-size:clamp(0.75rem, 3.1vw, 1.05rem); font-weight:bold;">내 기록: ${d.powerRec}cm (${d.powerScore}점, ${d.powerGrade}등급)</div><div style="background:#f0f2f5; padding:8px 6px; border-radius:8px; margin-top:10px; font-size:0.83em; color:#444; text-align:left; line-height:1.5;">• 학년평균: ${st.power.school.avg}cm (전교 ${st.power.school.rank}등)<br>• 반평균: ${st.power.class.avg}cm (반 ${st.power.class.rank}등)</div></div><div class="card" style="grid-column: span 2; margin-bottom:0; text-align:center; padding:15px 10px; border-top:4px solid #9c27b0;"><h4 style="margin-top:0; color:#555; line-height:1.4; font-size:clamp(0.8rem, 3.5vw, 1rem);">⚖️ 비만<br>(체질량지수/BMI)</h4><div style="background:#1e3c72; color:white; padding:10px 2px; border-radius:8px; margin-top:10px; font-size:clamp(0.8rem, 3.3vw, 1.1rem); font-weight:bold;">내 기록: ${d.bmiRec} (${d.bmiScore}점, ${d.bmiGrade})</div><div style="background:#f0f2f5; padding:10px; border-radius:8px; margin-top:10px; font-size:0.85em; color:#444; text-align:left; line-height:1.5; display:grid; grid-template-columns: 1fr 1fr; gap:10px;"><div>• 학년평균 BMI: ${st.bmi.school.avg} (전교 ${st.bmi.school.rank}등)</div><div>• 반평균 BMI: ${st.bmi.class.avg} (반 ${st.bmi.class.rank}등)</div></div></div></div>`;
+      if(res.pdfUrl) { html += `<h3 style="color:#1e3c72; border-bottom: 2px solid #1e3c72; padding-bottom:5px; margin-top:30px;">📄 상세 체력 분석지 (PDF)</h3><iframe src="${res.pdfUrl}" width="100%" height="600px" style="border:none; border-radius:12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);"></iframe>`; } else { html += `<div style="text-align:center; color:#999; margin-top:20px; font-size:0.9em;">해당 년도에 업로드된 상세 분석지(PDF)가 없습니다.</div>`; }
+      document.getElementById(containerId).innerHTML = html;
+      setTimeout(() => {
+        const ctx = document.getElementById('papsRadarChart-' + year).getContext('2d');
+        if (papsRadarChartInstance) { papsRadarChartInstance.destroy(); }
+        papsRadarChartInstance = new Chart(ctx, { type: 'radar', data: { labels: ['심폐지구력', '유연성', '근력', '순발력', '비만도'], datasets: [{ label: '나의 점수', data: [d.cardioScore, d.flexScore, d.strengthScore, d.powerScore, d.bmiScore], backgroundColor: 'rgba(30, 60, 114, 0.15)', borderColor: 'rgba(30, 60, 114, 1)', pointBackgroundColor: '#e91e63', borderWidth: 2.5, pointRadius: 4 }, { label: '우리 반 평균', data: [d.classScoreAvg.cardio, d.classScoreAvg.flex, d.classScoreAvg.strength, d.classScoreAvg.power, d.classScoreAvg.bmi], backgroundColor: 'transparent', borderColor: 'rgba(76, 175, 80, 0.85)', borderDash: [4, 4], borderWidth: 2, pointRadius: 0 }, { label: '학년 평균', data: [d.schoolScoreAvg.cardio, d.schoolScoreAvg.flex, d.schoolScoreAvg.strength, d.schoolScoreAvg.power, d.schoolScoreAvg.bmi], backgroundColor: 'transparent', borderColor: 'rgba(156, 39, 176, 0.75)', borderDash: [2, 2], borderWidth: 1.5, pointRadius: 0 }] }, options: { scales: { r: { min: 0, max: 20, ticks: { stepSize: 5 } } }, plugins: { legend: { position: 'bottom', labels: { boxWidth: 20, font: { size: 11 } } } } } });
+      }, 100);
+    });
+  }
+
+  function changeAdminYear() { loadAdminGradeStats(); }
+
+  function loadAdminGradeStats() {
+    const tbody = document.getElementById('admin-grade-stats-tbody'), year = document.getElementById('admin-year-select') ? document.getElementById('admin-year-select').value : CURRENT_ACADEMIC_YEAR;
+    if(!tbody) return;
+    tbody.innerHTML = `<tr><td colspan="4" style="padding:30px; color:#999;">${year}학년도 데이터를 분석하는 중입니다...</td></tr>`; document.getElementById('health-class-stats-container').innerHTML = "";
+    gsRun('getAdminGradeStats', year, currentUser.token).then(function(res) { if(res.success) { cachedGradeStats = res.data; renderAdminGradeTable(); } else { tbody.innerHTML = `<tr><td colspan="4" style="color:red; padding:15px;">❌ 통계 로드 실패: ${escapeHtml(res.message)}</td></tr>`; } });
+  }
+
+  function changeAdminGradeTab(grade) {
+    activeGradeTab = grade;
+    ["1", "2", "3"].forEach(g => { const btn = document.getElementById("btn-stat-g" + g); if(btn) { if(g === grade) { btn.style.background = "#203a43"; btn.style.color = "white"; } else { btn.style.background = "transparent"; btn.style.color = "#555"; } } });
+    renderAdminGradeTable();
+  }
+
+  function renderAdminGradeTable() {
+    const tbody = document.getElementById('admin-grade-stats-tbody'), healthContainer = document.getElementById('health-class-stats-container');
+    if(!tbody || !cachedGradeStats) return;
+    const gData = cachedGradeStats[activeGradeTab];
+    if(!gData || gData.totalStudents === 0) { tbody.innerHTML = `<tr><td colspan="4" style="padding:20px; color:#999;">해당 학년의 등록된 데이터가 없습니다.</td></tr>`; healthContainer.innerHTML = ""; return; }
+    healthContainer.innerHTML = `<div style="background:#fff3e0; border:1px solid #ffcc80; padding:15px; border-radius:8px; margin-bottom:15px; text-align:center; box-shadow:0 2px 8px rgba(0,0,0,0.05);"><div style="font-size:1.1em; color:#e65100; font-weight:bold; margin-bottom:10px;">📊 ${activeGradeTab}학년 종합 등급별 인원 분포 및 건강체력교실 대상자 현황</div><div style="font-size:0.95em; color:#555; margin-bottom:12px; background:white; display:inline-block; padding:8px 15px; border-radius:20px; border:1px solid #ffe0b2;"> 1등급: <span style="font-weight:bold; color:#1b5e20;">${gData.grade1}명</span> &nbsp;|&nbsp; 2등급: <span style="font-weight:bold; color:#4caf50;">${gData.grade2}명</span> &nbsp;|&nbsp; 3등급: <span style="font-weight:bold; color:#ff9800;">${gData.grade3}명</span> &nbsp;|&nbsp; 4등급: <span style="font-weight:bold; color:#d32f2f;">${gData.grade4}명</span> &nbsp;|&nbsp; 5등급: <span style="font-weight:bold; color:#d32f2f;">${gData.grade5}명</span></div><div style="font-size:1.15em; font-weight:bold; color:#333;"> 건강체력교실 대상자(4·5등급): 전체 ${gData.totalStudents}명 중 <span style="color:#d32f2f; font-size:1.2em;">${gData.targetCount}명</span> (<span style="color:#d32f2f;">${gData.targetRatio}%</span>)</div></div>`;
+    tbody.innerHTML = `<tr style="border-bottom:1px solid #eee; font-weight:bold; background:#fffbf0;"><td style="padding:12px 5px; text-align:left; font-weight:bold; color:#e65100;">🏆 건강체력평가 종합 점수</td><td style="padding:12px 5px; background:#e8f5e9;">-</td><td style="padding:12px 5px; background:#e3f2fd; color:#0d47a1; font-size:1.1em;">${gData.totalScore}점</td><td style="padding:12px 5px; background:#f3e5f5; color:#4a148c; font-size:1.1em;">${gData.totalGrade}등급</td></tr><tr style="border-bottom:1px solid #eee;"><td style="padding:11px 5px; text-align:left;">🏃 심폐지구력 (왕복오래달리기)</td><td style="padding:11px 5px; background:#e8f5e9;">${gData.cardio.rec}회</td><td style="padding:11px 5px; background:#e3f2fd;">${gData.cardio.score}점</td><td style="padding:11px 5px; background:#f3e5f5;">${gData.cardio.grade}등급</td></tr><tr style="border-bottom:1px solid #eee;"><td style="padding:11px 5px; text-align:left;">🤸 유연성 (앉아윗몸앞으로굽히기)</td><td style="padding:11px 5px; background:#e8f5e9;">${gData.flex.rec}cm</td><td style="padding:11px 5px; background:#e3f2fd;">${gData.flex.score}점</td><td style="padding:11px 5px; background:#f3e5f5;">${gData.flex.grade}등급</td></tr><tr style="border-bottom:1px solid #eee;"><td style="padding:11px 5px; text-align:left;">💪 근력·근지구력 (팔굽혀펴기)</td><td style="padding:11px 5px; background:#e8f5e9;">${gData.strength.rec}회</td><td style="padding:11px 5px; background:#e3f2fd;">${gData.strength.score}점</td><td style="padding:11px 5px; background:#f3e5f5;">${gData.strength.grade}등급</td></tr><tr style="border-bottom:1px solid #eee;"><td style="padding:11px 5px; text-align:left;">⚡ 순발력 (제자리멀리뛰기)</td><td style="padding:11px 5px; background:#e8f5e9;">${gData.power.rec}cm</td><td style="padding:11px 5px; background:#e3f2fd;">${gData.power.score}점</td><td style="padding:11px 5px; background:#f3e5f5;">${gData.power.grade}등급</td></tr><tr style="border-bottom:1px solid #eee;"><td style="padding:11px 5px; text-align:left; color:#7b1fa2; font-weight:bold;">⚖️ 비만 (체질량지수/BMI)</td><td style="padding:11px 5px; background:#e8f5e9; font-weight:bold;">${gData.bmi.rec}</td><td style="padding:11px 5px; background:#e3f2fd; font-weight:bold;">${gData.bmi.score}점</td><td style="padding:11px 5px; background:#f3e5f5; font-weight:bold;">${gData.bmi.grade}등급</td></tr>`;
+  }
+
+  function uploadExcel() {
+    const fileInput = document.getElementById('excel-file'), yearSelect = document.getElementById('upload-year-select');
+    const targetYear = yearSelect ? yearSelect.value : CURRENT_ACADEMIC_YEAR;
+    if(fileInput.files.length === 0) { showAlert("NEIS 엑셀 파일을 선택해주세요."); return; }
+    const file = fileInput.files[0], msg = document.getElementById('excel-upload-msg'); msg.innerText = "엑셀 양식을 분석하고 있습니다..."; msg.style.color = "blue";
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const data = new Uint8Array(e.target.result), workbook = XLSX.read(data, {type: 'array'});
+      const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {header: 1});
+      let grade = "", cls = "", parsedData = [];
+      for(let i = 0; i < json.length; i++) {
+        const row = json[i]; if(!row || row.length === 0) continue;
+        if(typeof row[0] === 'string' || typeof row[1] === 'string') { const match = ((row[0] || "") + " " + (row[1] || "")).match(/([0-9]+)\s*학년\s*([0-9]+)\s*반/); if(match) { grade = match[1]; cls = match[2]; } }
+        if(grade && cls && !isNaN(row[0]) && parseInt(row[0]) > 0 && typeof row[1] === 'string') {
+          const num = parseInt(row[0]), name = row[1].trim(), formatNum = (n) => n.toString().padStart(2, '0');
+          const correctId = grade + formatNum(cls) + formatNum(num), getVal = (idx) => row[idx] !== undefined ? row[idx] : "";
+          parsedData.push([correctId, name, getVal(2), getVal(3), getVal(4), getVal(7), getVal(8), getVal(9), getVal(13), getVal(15), getVal(17), getVal(20), getVal(21), getVal(24), getVal(25), getVal(27), getVal(28), getVal(29), getVal(30)]);
+        }
+      }
+      if(parsedData.length === 0) { msg.innerText = "❌ 학생 데이터를 찾지 못했습니다."; msg.style.color = "red"; return; }
+      msg.innerText = `총 ${parsedData.length}명의 데이터를 저장 중입니다...`;
+      gsRun('saveNeisPapsData', parsedData, targetYear, currentUser.token).then(function(res) { if(res.success) { msg.innerText = "✅ " + res.message; fileInput.value = ""; loadAdminGradeStats(); } else { msg.innerText = "❌ " + res.message; msg.style.color = "red"; } });
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  async function uploadPdf() {
+    const fileInput = document.getElementById('pdf-file'), files = fileInput.files;
+    if(files.length === 0) { showAlert("업로드할 PDF 파일들을 선택해주세요."); return; }
+    const msg = document.getElementById('upload-msg'); msg.style.color = "blue"; msg.innerHTML = "";
+    let successCount = 0, failCount = 0, errorDetails = "";
+    // 파일별 실패를 개별 알림창 대신 메시지 영역에 누적 표시하기 위해 gsRun 대신 직접 호출한다.
+    const uploadSingleFile = (file) => {
+      return new Promise((resolve) => {
+        if(!file.name.toLowerCase().endsWith('.pdf')) { resolve({success: false, message: "PDF 파일이 아닙니다."}); return; }
+        const reader = new FileReader();
+        reader.onload = function(e) { const data = e.target.result; google.script.run.withSuccessHandler(res => resolve(res)).withFailureHandler(err => resolve({success: false, message: err.message})).uploadPapsPdf(data, file.name, currentUser.token); };
+        reader.readAsDataURL(file);
+      });
+    };
+    for(let i = 0; i < files.length; i++) {
+      msg.innerText = `업로드 진행 중... (${i + 1} / ${files.length}개) : ${files[i].name}`;
+      const res = await uploadSingleFile(files[i]);
+      if(res.success) successCount++; else { failCount++; errorDetails += `<br><span style="color:red;">❌ ${escapeHtml(files[i].name)} 실패: ${escapeHtml(res.message)}</span>`; }
+    }
+    msg.innerHTML = `✅ 전체 업로드 완료! (성공: ${successCount}건, 실패: ${failCount}건)` + errorDetails;
+    msg.style.color = failCount > 0 ? "red" : "green"; fileInput.value = ""; loadAdminGradeStats();
+  }
+
+  function clearPapsFolder() {
+    showConfirm("⚠️ 경고: 구글 드라이브 폴더의 모든 PDF 파일이 삭제됩니다.<br>전체 초기화를 진행할까요?", function() {
+      const btn = document.getElementById('btn-paps-clear'), msg = document.getElementById('clear-msg');
+      btn.disabled = true; btn.innerText = "서버 폴더 청소 중..."; msg.style.color = "#1e3c72"; msg.innerText = "🔄 구글 드라이브 비우는 중...";
+      gsRun('clearAllPapsPdf', currentUser.token).then(function(res) {
+        btn.disabled = false; btn.innerText = "🚨 잘못 올라간 PDF 전체 초기화";
+        if(res.success) { msg.style.color = "green"; msg.innerHTML = "✅ " + res.message; } else { msg.style.color = "red"; msg.innerText = "❌ " + res.message; }
+      }).catch(function() { btn.disabled = false; btn.innerText = "🚨 잘못 올라간 PDF 전체 초기화"; });
+    });
+  }
+</script>

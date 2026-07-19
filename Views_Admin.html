@@ -1,146 +1,4 @@
 <!-- ======================================================== -->
-<!-- 1. 통합 일반 모드 (학생/일반교사 뷰) -->
-<!-- ======================================================== -->
-<div id="main-view" class="hidden">
-  <div class="hero">
-    <div class="header-top">
-      <div class="header-title-group" style="cursor: pointer;" onclick="switchTab('home')">
-        <img src="https://lh3.googleusercontent.com/d/19-2im0ZDmLGk7YWgcPgTQscBnS-0tRTs" alt="한영고 로고" class="school-logo">
-        <h1>한영고등학교 체육부</h1>
-      </div>
-      <button class="logout-btn" onclick="logout()">로그아웃</button>
-    </div>
-    
-    <div class="nav-menu">
-      <button id="tab-home" class="nav-btn active" onclick="switchTab('home')">홈</button>
-      <button id="tab-paps" class="nav-btn" onclick="switchTab('paps')">PAPS</button>
-      <button id="tab-sports" class="nav-btn" onclick="switchTab('sports')">체육한마당</button>
-      <button id="tab-friendly" class="nav-btn" onclick="switchTab('friendly')">친사리그</button>
-      
-      <div class="dropdown">
-        <button id="tab-sportsclub" class="nav-btn">스포츠클럽 ▾</button>
-        <div class="dropdown-content">
-          <button onclick="switchTab('sportsclub-soccer', 'tab-sportsclub')">축구</button>
-          <button onclick="switchTab('sportsclub-basketball', 'tab-sportsclub')">농구</button>
-          <button onclick="switchTab('sportsclub-volleyball', 'tab-sportsclub')">배구</button>
-          <button onclick="switchTab('sportsclub-badminton', 'tab-sportsclub')">배드민턴</button>
-        </div>
-      </div>
-      
-      <div class="dropdown">
-        <button id="tab-afterschool" class="nav-btn">방과후 ▾</button>
-        <div class="dropdown-content">
-          <button onclick="switchTab('afterschool-main', 'tab-afterschool')">방과후</button>
-          <button onclick="switchTab('afterschool-small', 'tab-afterschool')">소규모수업</button>
-        </div>
-      </div>
-      
-      <div class="dropdown">
-        <button id="tab-lunch" class="nav-btn">점심시간 ▾</button>
-        <div class="dropdown-content">
-          <button onclick="switchTab('lunch-gym', 'tab-lunch')">체육관</button>
-          <button onclick="switchTab('lunch-field', 'tab-lunch')">운동장</button>
-          <button onclick="switchTab('lunch-futsal', 'tab-lunch')">풋살장</button>
-        </div>
-      </div>
-
-      <button id="tab-pe-teacher" class="nav-btn hidden" onclick="openPETeacherView()">체육교사</button>
-    </div>
-  </div>
-  
-  <div class="container">
-    <div id="welcome-msg" style="margin-bottom: 20px; font-weight: bold; color: #333;"></div>
-    
-    <!-- [화면] 홈 -->
-    <div id="content-home">
-      <div style="background: white; border-radius: 12px; padding: 20px; margin-bottom: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border-left: 5px solid #e91e63;">
-        <h3 style="margin-top:0; margin-bottom:15px; color:#1e3c72; display:flex; align-items:center; gap:8px;">📢 체육부 주요 공지</h3>
-        <div id="home-notice-list" style="max-height: 280px; overflow-y: auto; padding-right:10px;">공지사항을 불러오는 중입니다...</div>
-      </div>
-      <div style="position: relative; border-radius: 12px; overflow: hidden; margin-bottom: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.15); min-height: 240px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; color: white;">
-        <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(rgba(20, 40, 80, 0.65), rgba(30, 60, 114, 0.75)), url('https://images.unsplash.com/photo-1544698310-74ea9d1c8258?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80') center/cover; z-index: 1;"></div>
-        <div style="position: relative; z-index: 2; padding: 25px 20px; width: 100%;">
-          <h2 style="margin-top:0; font-size:1.85em; letter-spacing:-0.5px; text-shadow: 2px 2px 5px rgba(0,0,0,0.6); font-weight: bold;">💪 한영고등학교 체육부</h2>
-          <p style="font-size:1.05em; opacity:0.95; margin-bottom:0; word-break:keep-all; text-shadow: 1px 1px 4px rgba(0,0,0,0.6); line-height: 1.5;">땀 흘리며 소통하고, 팀워크로 하나 되는 공간입니다.<br>활기찬 학교생활을 위해 함께 달립시다!</p>
-        </div>
-      </div>
-      <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-bottom: 20px;">
-        <div class="card" style="text-align:center; cursor:pointer; transition:0.2s; word-break:keep-all;" onclick="switchTab('paps')" onmouseover="this.style.transform='translateY(-5px)'" onmouseout="this.style.transform='translateY(0)'">
-          <div style="font-size:2.5em; margin-bottom:10px;">📊</div>
-          <div style="font-weight:bold; color:#1e3c72; font-size:1.1em;">나의 PAPS</div><div style="font-size:0.8em; color:#666; margin-top:5px;">건강체력평가 분석</div>
-        </div>
-        <div class="card" style="text-align:center; cursor:pointer; transition:0.2s; word-break:keep-all;" onclick="switchTab('sports')" onmouseover="this.style.transform='translateY(-5px)'" onmouseout="this.style.transform='translateY(0)'">
-          <div style="font-size:2.5em; margin-bottom:10px;">🏆</div>
-          <div style="font-weight:bold; color:#1e3c72; font-size:1.1em;">체육한마당</div><div style="font-size:0.8em; color:#666; margin-top:5px;">대회 일정 및 결과</div>
-        </div>
-        <div class="card" style="text-align:center; cursor:pointer; transition:0.2s; word-break:keep-all;" onclick="switchTab('afterschool-main', 'tab-afterschool')" onmouseover="this.style.transform='translateY(-5px)'" onmouseout="this.style.transform='translateY(0)'">
-          <div style="font-size:2.5em; margin-bottom:10px;">🏃</div>
-          <div style="font-weight:bold; color:#1e3c72; font-size:1.1em;">방과후 학교</div><div style="font-size:0.8em; color:#666; margin-top:5px;">수업 신청 및 확인</div>
-        </div>
-        <div class="card" style="text-align:center; cursor:pointer; transition:0.2s; word-break:keep-all;" onclick="switchTab('lunch-gym', 'tab-lunch')" onmouseover="this.style.transform='translateY(-5px)'" onmouseout="this.style.transform='translateY(0)'">
-          <div style="font-size:2.5em; margin-bottom:10px;">🏟️</div>
-          <div style="font-weight:bold; color:#1e3c72; font-size:1.1em;">시설 예약</div><div style="font-size:0.8em; color:#666; margin-top:5px;">점심시간 체육관</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- [화면] PAPS -->
-    <div id="content-paps" class="hidden"><div id="paps-list"></div></div>
-    
-    <!-- [화면] 체육한마당 (학생용 세로형 대진표) -->
-    <div id="content-sports" class="hidden">
-      <div style="background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); color: white; padding: 25px 20px; border-radius: 12px; margin-bottom: 20px; text-align: center; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
-        <h2 style="margin: 0 0 10px 0; font-size: 1.6em; letter-spacing:-0.5px;">🔥 한영고 체육한마당 🔥</h2>
-        <p style="margin: 0; font-size: 0.95em; opacity: 0.9;">선생님께서 확정 배포하신 실시간 대진표와 일정을 확인하세요.</p>
-      </div>
-      <div class="card" style="border-top: 5px solid #1e3c72;">
-        <h3 style="margin-top: 0; color: #1e3c72; border-bottom: 2px solid #f0f2f5; padding-bottom: 10px;">📋 대진표 조회하기</h3>
-        <div style="display:flex; gap:10px; margin-bottom:20px; flex-wrap:wrap;">
-          <select id="student-sports-year" class="input-field" style="flex:1; min-width:80px; margin:0;"><option value="2027" selected>2027학년도</option><option value="2026">2026학년도</option></select>
-          <select id="student-sports-grade" class="input-field" style="flex:1; min-width:80px; margin:0;"><option value="1">1학년</option><option value="2">2학년</option><option value="3">3학년</option></select>
-          <select id="student-sports-type" class="input-field" style="flex:1; min-width:80px; margin:0;"><option value="축구">축구</option><option value="농구">농구</option><option value="족구">족구</option></select>
-          <button class="btn-primary" onclick="loadStudentSportsBracket()" style="flex:1; min-width:80px; margin:0; padding:12px;">조회</button>
-        </div>
-        <div id="student-bracket-area" style="display:none;">
-          <div style="background:#f4f7f6; border:2px solid #b3c2d1; border-radius:8px; padding:20px 10px; overflow-x:auto; margin-bottom:20px;">
-            <div style="display:flex; flex-direction:column; min-width: 650px; margin:0 auto;">
-              <div style="display:flex; justify-content:center; width:100%;"><div style="background:#fff; border:2px solid #d32f2f; border-radius:6px; padding:10px 30px; text-align:center; font-weight:bold; color:#d32f2f; font-size:1.2em; box-shadow:0 4px 8px rgba(0,0,0,0.1); z-index:2;">🏆 최후의 승자 🏆</div></div>
-              <div style="display:flex; width:100%; height:20px;"><div style="flex:1; display:flex; justify-content:center;"><div style="width:2px; background:#d32f2f; height:100%;"></div></div></div>
-              <div style="display:flex; width:100%; height:20px;"><div style="flex:1; display:flex; justify-content:center; align-items:flex-start;"><div style="width:50%; border-top:2px solid #d32f2f; height:100%; border-left:2px solid #d32f2f; border-right:2px solid #d32f2f;"></div></div></div>
-              <div style="display:flex; width:100%; height:20px;"><div style="flex:1; display:flex; justify-content:center;"><div style="width:2px; background:#1e3c72; height:100%;"></div></div><div style="flex:1; display:flex; justify-content:center;"><div style="width:2px; background:#1e3c72; height:100%;"></div></div></div>
-              <div style="display:flex; width:100%; height:20px;"><div style="flex:1; display:flex; justify-content:center; align-items:flex-start;"><div style="width:50%; border-top:2px solid #1e3c72; height:100%; border-left:2px solid #1e3c72; border-right:2px solid #1e3c72;"></div></div><div style="flex:1; display:flex; justify-content:center; align-items:flex-start;"><div style="width:50%; border-top:2px solid #1e3c72; height:100%; border-left:2px solid #1e3c72; border-right:2px solid #1e3c72;"></div></div></div>
-              <div style="display:flex; width:100%; height:20px;"><div style="flex:1; display:flex; justify-content:center;"><div style="width:2px; background:#1e3c72; height:100%;"></div></div><div style="flex:1; display:flex; justify-content:center;"><div style="width:2px; background:#1e3c72; height:100%;"></div></div><div style="flex:1; display:flex; justify-content:center;"><div style="width:2px; background:#1e3c72; height:100%;"></div></div><div style="flex:1; display:flex; justify-content:center;"><div style="width:2px; background:#1e3c72; height:100%;"></div></div></div>
-              <div style="display:flex; width:100%; height:20px;"><div style="flex:1; display:flex; justify-content:center; align-items:flex-start;"><div style="width:50%; border-top:2px solid #1e3c72; height:100%; border-left:2px solid #1e3c72; border-right:2px solid #1e3c72;"></div></div><div style="flex:1; display:flex; justify-content:center; align-items:flex-start;"><div style="width:50%; border-top:2px solid #1e3c72; height:100%; border-left:2px solid #1e3c72; border-right:2px solid #1e3c72;"></div></div><div style="flex:1; display:flex; justify-content:center; align-items:flex-start;"><div style="width:50%; border-top:2px solid #1e3c72; height:100%; border-left:2px solid #1e3c72; border-right:2px solid #1e3c72;"></div></div><div style="flex:1; display:flex; justify-content:center; align-items:flex-start;"><div style="width:50%; border-top:2px solid #1e3c72; height:100%; border-left:2px solid #1e3c72; border-right:2px solid #1e3c72;"></div></div></div>
-              <div style="display:flex; width:100%; height:15px;"><div style="flex:1; display:flex; justify-content:center;"><div style="width:2px; background:#1e3c72; height:100%;"></div></div><div style="flex:1; display:flex; justify-content:center;"><div style="width:2px; background:#1e3c72; height:100%;"></div></div><div style="flex:1; display:flex; justify-content:center;"><div style="width:2px; background:#1e3c72; height:100%;"></div></div><div style="flex:1; display:flex; justify-content:center;"><div style="width:2px; background:#1e3c72; height:100%;"></div></div><div style="flex:1; display:flex; justify-content:center;"><div style="width:2px; background:#1e3c72; height:100%;"></div></div><div style="flex:1; display:flex; justify-content:center;"><div style="width:2px; background:#1e3c72; height:100%;"></div></div><div style="flex:1; display:flex; justify-content:center;"><div style="width:2px; background:#1e3c72; height:100%;"></div></div><div style="flex:1; display:flex; justify-content:center;"><div style="width:2px; background:#1e3c72; height:100%;"></div></div></div>
-              <div style="display:flex; width:100%;">
-                 <div style="flex:1; padding:0 3px; text-align:center;"><div id="st-team-1" style="width:100%; text-align:center; padding:8px 0; border:2px solid #1e3c72; border-radius:6px; font-weight:bold; color:#1e3c72; font-size:0.95em; background:#fff;"></div></div><div style="flex:1; padding:0 3px; text-align:center;"><div id="st-team-2" style="width:100%; text-align:center; padding:8px 0; border:2px solid #1e3c72; border-radius:6px; font-weight:bold; color:#1e3c72; font-size:0.95em; background:#fff;"></div></div><div style="flex:1; padding:0 3px; text-align:center;"><div id="st-team-3" style="width:100%; text-align:center; padding:8px 0; border:2px solid #1e3c72; border-radius:6px; font-weight:bold; color:#1e3c72; font-size:0.95em; background:#fff;"></div></div><div style="flex:1; padding:0 3px; text-align:center;"><div id="st-team-4" style="width:100%; text-align:center; padding:8px 0; border:2px solid #1e3c72; border-radius:6px; font-weight:bold; color:#1e3c72; font-size:0.95em; background:#fff;"></div></div><div style="flex:1; padding:0 3px; text-align:center;"><div id="st-team-5" style="width:100%; text-align:center; padding:8px 0; border:2px solid #1e3c72; border-radius:6px; font-weight:bold; color:#1e3c72; font-size:0.95em; background:#fff;"></div></div><div style="flex:1; padding:0 3px; text-align:center;"><div id="st-team-6" style="width:100%; text-align:center; padding:8px 0; border:2px solid #1e3c72; border-radius:6px; font-weight:bold; color:#1e3c72; font-size:0.95em; background:#fff;"></div></div><div style="flex:1; padding:0 3px; text-align:center;"><div id="st-team-7" style="width:100%; text-align:center; padding:8px 0; border:2px solid #1e3c72; border-radius:6px; font-weight:bold; color:#1e3c72; font-size:0.95em; background:#fff;"></div></div><div style="flex:1; padding:0 3px; text-align:center;"><div id="st-team-8" style="width:100%; text-align:center; padding:8px 0; border:2px solid #1e3c72; border-radius:6px; font-weight:bold; color:#1e3c72; font-size:0.95em; background:#fff;"></div></div>
-              </div>
-            </div>
-          </div>
-          <div style="background:#f0f2f5; padding:15px; border-radius:8px;">
-            <h4 style="margin-top:0; color:#1e3c72;">🗓️ 경기 일정 안내</h4>
-            <div id="student-schedule-view" style="font-size:0.95em; color:#444; white-space:pre-wrap; line-height:1.6; border:1px solid #ccc; padding:12px; background:white; border-radius:6px;"></div>
-          </div>
-        </div>
-        <div id="student-bracket-empty" style="text-align:center; padding:40px 10px; color:#999; display:block;">조회 버튼을 눌러 확정된 대진표를 확인하세요.</div>
-      </div>
-    </div>
-    
-    <!-- [화면] 기타 플레이스홀더 (업데이트 예정 영역들) -->
-    <div id="content-friendly" class="hidden"><h3 style="color:#1e3c72; border-bottom: 2px solid #1e3c72; padding-bottom:5px;">🤝 친사리그</h3><div class="card">업데이트 예정입니다.</div></div>
-    <div id="content-sportsclub-soccer" class="hidden"><h3 style="color:#1e3c72; border-bottom: 2px solid #1e3c72; padding-bottom:5px;">⚽ 스포츠클럽 - 축구</h3><div class="card">업데이트 예정입니다.</div></div>
-    <div id="content-sportsclub-basketball" class="hidden"><h3 style="color:#1e3c72; border-bottom: 2px solid #1e3c72; padding-bottom:5px;">🏀 스포츠클럽 - 농구</h3><div class="card">업데이트 예정입니다.</div></div>
-    <div id="content-sportsclub-volleyball" class="hidden"><h3 style="color:#1e3c72; border-bottom: 2px solid #1e3c72; padding-bottom:5px;">🏐 스포츠클럽 - 배구</h3><div class="card">업데이트 예정입니다.</div></div>
-    <div id="content-sportsclub-badminton" class="hidden"><h3 style="color:#1e3c72; border-bottom: 2px solid #1e3c72; padding-bottom:5px;">🏸 스포츠클럽 - 배드민턴</h3><div class="card">업데이트 예정입니다.</div></div>
-    <div id="content-afterschool-main" class="hidden"><h3 style="color:#1e3c72; border-bottom: 2px solid #1e3c72; padding-bottom:5px;">🏃 방과후 학교</h3><div class="card">업데이트 예정입니다.</div></div>
-    <div id="content-afterschool-small" class="hidden"><h3 style="color:#1e3c72; border-bottom: 2px solid #1e3c72; padding-bottom:5px;">🧑‍🏫 소규모 수업</h3><div class="card">업데이트 예정입니다.</div></div>
-    <div id="content-lunch-gym" class="hidden"><h3 style="color:#1e3c72; border-bottom: 2px solid #1e3c72; padding-bottom:5px;">🏟️ 점심시간 - 체육관</h3><div class="card">업데이트 예정입니다.</div></div>
-    <div id="content-lunch-field" class="hidden"><h3 style="color:#1e3c72; border-bottom: 2px solid #1e3c72; padding-bottom:5px;">🌿 점심시간 - 운동장</h3><div class="card">업데이트 예정입니다.</div></div>
-    <div id="content-lunch-futsal" class="hidden"><h3 style="color:#1e3c72; border-bottom: 2px solid #1e3c72; padding-bottom:5px;">🥅 점심시간 - 풋살장</h3><div class="card">업데이트 예정입니다.</div></div>
-  </div>
-</div>
-
-<!-- ======================================================== -->
 <!-- 2. 통합 관리자 모드 (체육교사 전용 뷰) -->
 <!-- ======================================================== -->
 <div id="pe-main-view" class="hidden">
@@ -152,11 +10,10 @@
       </div>
       <button class="logout-btn" onclick="logout()">로그아웃</button>
     </div>
-    
+
     <div class="pe-nav-menu">
       <button id="tab-pe-home" class="pe-nav-btn active" onclick="switchPETab('pe-home')">관리자 홈</button>
-      
-      <!-- ★ 수정됨: 물품 관리를 드롭다운 메뉴로 분리 -->
+
       <div class="dropdown">
         <button id="tab-pe-inventory-manage" class="pe-nav-btn">물품 관리 ▾</button>
         <div class="dropdown-content">
@@ -164,16 +21,16 @@
           <button onclick="switchPETab('pe-purchase-list', 'tab-pe-inventory-manage')">물품구입명단</button>
         </div>
       </div>
-      
+
       <button id="tab-pe-paps-manage" class="pe-nav-btn" onclick="switchPETab('pe-paps-manage')">PAPS</button>
       <button id="tab-pe-sports-manage" class="pe-nav-btn" onclick="switchPETab('pe-sports-manage')">체육한마당</button>
       <button id="tab-pe-lunch-manage" class="pe-nav-btn" onclick="switchPETab('pe-lunch-manage')">점심시간</button>
       <button id="tab-pe-board-manage" class="pe-nav-btn" onclick="switchPETab('pe-board-manage')">공지사항</button>
-      
+
       <button class="pe-nav-btn" onclick="closePETeacherView()" style="margin-left: auto; background: rgba(255,255,255,0.15); padding: 15px 20px;">나가기 ↩</button>
     </div>
   </div>
-  
+
   <div class="container">
     <div id="content-pe-home">
       <div class="card">
@@ -182,12 +39,11 @@
       </div>
     </div>
 
-    <!-- ★ 신규: [관리자] 체육물품현황 (재고 보기 및 입력) -->
+    <!-- [관리자] 체육물품현황 (재고 보기 및 입력) -->
     <div id="content-pe-inventory-status" class="hidden">
       <div class="card" style="border-top: 5px solid #4caf50; margin-bottom: 20px;">
         <h3 style="margin-top:0; color:#1b5e20;">📦 장소별 체육 물품 등록 및 현황</h3>
-        
-        <!-- 물품 직접 등록 폼 (누락되었던 부분) -->
+
         <div style="background:#f0f2f5; padding:15px; border-radius:8px; margin-bottom:20px;">
           <h4 style="margin-top:0; color:#4caf50; font-size:1em; margin-bottom:10px;">➕ 신규 물품 기록하기</h4>
           <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
@@ -206,7 +62,6 @@
           </div>
         </div>
 
-        <!-- 물품 조회 (기본 세팅 4가지 반영) -->
         <div style="display:flex; gap:10px; margin-bottom:15px; align-items:center;">
           <select id="inventory-location-select" class="input-field" onchange="loadInventory()" style="margin:0; max-width:200px;">
             <option value="전체">전체 장소 보기</option>
@@ -226,15 +81,14 @@
       </div>
     </div>
 
-    <!-- ★ 신규: [관리자] 물품구입명단 (기안 폼 및 엑셀 다운로드) -->
+    <!-- [관리자] 물품구입명단 (기안 폼 및 엑셀 다운로드) -->
     <div id="content-pe-purchase-list" class="hidden">
       <div class="card" style="border-top: 5px solid #2196f3;">
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; margin-bottom:15px;">
           <h3 style="margin:0; color:#0d47a1;">🛒 물품 구입 기안 신청 명단</h3>
           <button class="btn-primary" onclick="downloadPurchaseExcel()" style="margin:0; width:auto; padding:10px 15px; background:#1e3c72; border-radius:6px; font-size:0.95em;">📊 엑셀 다운로드</button>
         </div>
-        
-        <!-- 교사별 신청 금액 현황 패널 -->
+
         <div style="background:#e3f2fd; padding:15px; border-radius:8px; margin-bottom:20px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
            <div style="font-weight:bold; color:#1e3c72; margin-right:5px;">👨‍🏫 교사별 신청 총액:</div>
            <div style="background:white; padding:8px 15px; border-radius:20px; font-size:0.9em; box-shadow:0 2px 5px rgba(0,0,0,0.05);">박정환: <span id="total-teacher-박정환" style="font-weight:bold; color:#d32f2f;">0원</span></div>
@@ -242,7 +96,6 @@
            <div style="background:white; padding:8px 15px; border-radius:20px; font-size:0.9em; box-shadow:0 2px 5px rgba(0,0,0,0.05);">양서경: <span id="total-teacher-양서경" style="font-weight:bold; color:#d32f2f;">0원</span></div>
         </div>
 
-        <!-- 새 물품 등록 폼 -->
         <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap:10px; margin-bottom:15px; background:#f0f2f5; padding:15px; border-radius:8px;">
            <input type="text" id="req-item" class="input-field" placeholder="내용(품명)" style="margin:0;">
            <input type="text" id="req-spec" class="input-field" placeholder="규격" style="margin:0;">
@@ -255,7 +108,6 @@
            <button class="btn-primary" id="btn-submit-req" onclick="submitPurchaseReq()" style="margin:0; padding:10px; grid-column: 1 / -1; background:#2196f3;">📝 구입 목록에 추가</button>
         </div>
 
-        <!-- 신청 내역 리스트 -->
         <div style="overflow-x:auto;">
           <table style="width:100%; border-collapse:collapse; text-align:center; font-size:0.9em;" id="purchase-table">
             <thead>
@@ -274,7 +126,7 @@
       <div class="card" style="border-top: 5px solid #203a43; margin-bottom: 20px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-wrap:wrap; gap:10px;">
           <h3 style="margin:0; color:#203a43; display:flex; align-items:center; gap:8px;">📊 학년별 PAPS 종합 통계 분석</h3>
-          <select id="admin-year-select" onchange="changeAdminYear()" style="padding:8px 15px; border-radius:8px; border:2px solid #203a43; font-weight:bold; font-size:1em; outline:none; background:white; color:#203a43; font-family:'NanumSquareRound'; cursor:pointer;"><option value="2026" selected>2026학년도</option><option value="2025">2025학년도</option><option value="2024">2024학년도</option></select>
+          <select id="admin-year-select" onchange="changeAdminYear()" style="padding:8px 15px; border-radius:8px; border:2px solid #203a43; font-weight:bold; font-size:1em; outline:none; background:white; color:#203a43; font-family:'NanumSquareRound'; cursor:pointer;"></select>
         </div>
         <div style="display:flex; gap:5px; margin-bottom:15px; background:#f0f2f5; padding:5px; border-radius:8px;">
           <button onclick="changeAdminGradeTab('1')" id="btn-stat-g1" style="flex:1; border:none; padding:10px; border-radius:6px; cursor:pointer; font-weight:bold; font-family:'NanumSquareRound'; transition:0.2s; background:#203a43; color:white;">1학년 통계</button>
@@ -293,7 +145,7 @@
         <h3 style="margin-top:0; color:#203a43;">📊 학생 PAPS 성적표 업로드</h3>
         <div style="color:#444; text-align:left; padding:10px; line-height: 1.6;">
           <div style="background:#e8f5e9; padding:20px; border-radius:8px; margin-top:10px;">
-            <select id="upload-year-select" style="margin-bottom:10px; padding:8px; border-radius:6px; font-family:'NanumSquareRound';"><option value="2026" selected>2026학년도 데이터 저장</option><option value="2025">2025학년도 데이터 저장</option><option value="2024">2024학년도 데이터 저장</option></select>
+            <select id="upload-year-select" style="margin-bottom:10px; padding:8px; border-radius:6px; font-family:'NanumSquareRound';"></select>
             <input type="file" id="excel-file" accept=".xlsx, .xls" style="margin-bottom:15px; width:100%; font-family:'NanumSquareRound'; border:1px solid #ccc; background:white; padding:8px; border-radius:6px;">
             <button class="btn-primary" onclick="uploadExcel()" style="background:#4caf50; margin-top:0;">엑셀 데이터베이스 자동 동기화</button>
             <p id="excel-upload-msg" style="font-size:0.95em; font-weight:bold; margin-top:15px; margin-bottom:0;"></p>
@@ -314,10 +166,10 @@
     <!-- [관리자] 체육한마당 관리 (교사용 세로형 대진표) -->
     <div id="content-pe-sports-manage" class="hidden">
       <div class="card" style="border-top: 5px solid #ff9800;">
-        <h3 style="margin-top:0; color:#e65100;">🏆 2027학년도 체육한마당 대진표 & 일정 조율</h3>
+        <h3 style="margin-top:0; color:#e65100;">🏆 체육한마당 대진표 & 일정 조율</h3>
         <p style="font-size:0.9em; color:#666; margin-bottom:20px;">이곳은 선생님 전용 작업실입니다. 배포하기 전까지는 학생들에게 비공개 상태로 안전하게 보호됩니다.</p>
         <div style="display:flex; gap:10px; margin-bottom:15px; flex-wrap:wrap;">
-          <select id="sports-year" class="input-field" style="flex:1; min-width:100px;"><option value="2027" selected>2027학년도</option><option value="2026">2026학년도 (마감)</option></select>
+          <select id="sports-year" class="input-field" style="flex:1; min-width:100px;"></select>
           <select id="sports-grade" class="input-field" style="flex:1; min-width:100px;"><option value="1">1학년</option><option value="2">2학년</option><option value="3">3학년</option></select>
           <select id="sports-type" class="input-field" style="flex:1; min-width:100px;"><option value="축구">축구</option><option value="농구">농구</option><option value="족구">족구</option></select>
         </div>
@@ -353,7 +205,7 @@
         </div>
       </div>
     </div>
-    
+
     <!-- [관리자] 기타 플레이스홀더 -->
     <div id="content-pe-lunch-manage" class="hidden"><div class="card"><h3 style="margin-top:0; color:#203a43;">📅 점심시간 예약 관리 (준비 중)</h3></div></div>
     <div id="content-pe-board-manage" class="hidden">

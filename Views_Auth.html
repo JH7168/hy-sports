@@ -1,0 +1,64 @@
+<!-- 통합 로그인 뷰 -->
+  <div id="login-view" class="container">
+    <div style="text-align:center; margin-bottom: 30px;">
+      <img src="https://lh3.googleusercontent.com/d/19-2im0ZDmLGk7YWgcPgTQscBnS-0tRTs" alt="학교 로고" style="width:80px; margin-bottom:15px;">
+      <h1 style="color:#1e3c72; margin:0;">한영고등학교 체육부</h1>
+      <p style="color:#666;">통합 관리 시스템 로그인</p>
+    </div>
+
+    <div class="box-ui">
+      <div class="role-selector">
+        <input type="radio" id="login-student" name="login-role" value="학생" checked>
+        <label for="login-student">🧑‍🎓 학생</label>
+        <input type="radio" id="login-teacher" name="login-role" value="교사">
+        <label for="login-teacher">👨‍🏫 일반교사</label>
+        <input type="radio" id="login-pe-teacher" name="login-role" value="체육교사">
+        <label for="login-pe-teacher">🏅 체육교사</label>
+      </div>
+      <input type="text" id="login-id" class="input-field" placeholder="아이디 (학생: 학번 / 교사: 이름)">
+      <input type="password" id="login-pw" class="input-field" placeholder="비밀번호">
+      <button class="btn-primary" onclick="attemptLogin()">로그인</button>
+      <button class="btn-secondary" onclick="toggleView('signup-view')">회원가입</button>
+      <div id="login-msg" style="color:red; text-align:center; margin-top:10px; font-weight:bold;"></div>
+    </div>
+  </div>
+
+  <!-- 통합 회원가입 뷰 -->
+  <div id="signup-view" class="container hidden">
+    <h2 style="text-align:center; color:#1e3c72;">회원가입</h2>
+    <div class="box-ui">
+      <div class="role-selector">
+        <input type="radio" id="reg-student" name="reg-role" value="학생" checked onchange="changeSignupForm()">
+        <label for="reg-student">🧑‍🎓 학생</label>
+        <input type="radio" id="reg-teacher" name="reg-role" value="교사" onchange="changeSignupForm()">
+        <label for="reg-teacher">👨‍🏫 일반교사</label>
+        <input type="radio" id="reg-pe-teacher" name="reg-role" value="체육교사" onchange="changeSignupForm()">
+        <label for="reg-pe-teacher">🏅 체육교사</label>
+      </div>
+
+      <div id="signup-student-form">
+        <div class="input-group">
+          <select id="reg-grade" class="input-field" style="margin:0;"><option value="">학년</option><option value="1">1학년</option><option value="2">2학년</option><option value="3">3학년</option></select>
+          <select id="reg-class" class="input-field" style="margin:0;"><option value="">반</option></select>
+          <select id="reg-num" class="input-field" style="margin:0;"><option value="">번호</option></select>
+        </div>
+        <div class="input-group">
+          <input type="text" id="reg-student-name" class="input-field" placeholder="학생 조회 결과 (이름)" readonly style="background:#e8f0fe; margin:0;">
+          <button class="btn-small" onclick="searchStudent()" style="margin:0;">학생 조회</button>
+        </div>
+      </div>
+
+      <div id="signup-teacher-form" class="hidden">
+        <input type="text" id="reg-teacher-name" class="input-field" placeholder="이름을 입력하세요">
+        <input type="password" id="reg-secret" class="input-field" placeholder="학교 가입 인증 코드">
+      </div>
+
+      <input type="password" id="reg-pw" class="input-field" placeholder="비밀번호 설정" onkeyup="checkPasswordMatch()">
+      <input type="password" id="reg-pw-confirm" class="input-field" placeholder="비밀번호 확인" onkeyup="checkPasswordMatch()">
+      <div id="pw-match-text" class="pw-match">✅ 비밀번호가 일치합니다.</div>
+      <div id="pw-mismatch-text" class="pw-mismatch">❌ 비밀번호가 일치하지 않습니다.</div>
+
+      <button class="btn-primary" onclick="attemptSignup()">가입하기</button>
+      <button class="btn-secondary" onclick="toggleView('login-view')">돌아가기</button>
+    </div>
+  </div>

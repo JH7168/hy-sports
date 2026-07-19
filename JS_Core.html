@@ -1,0 +1,216 @@
+<script>
+  // =========================================================================
+  // 전역 변수 모음
+  // =========================================================================
+  const CURRENT_ACADEMIC_YEAR = "<?= getCurrentAcademicYear() ?>";
+  let currentUser = null; // { role, id, name, token }
+  let verifiedStudentName = "";
+  let cachedGradeStats = null;
+  let activeGradeTab = "1";
+  let papsRadarChartInstance = null;
+  let papsTargetId = "";
+
+  // =========================================================================
+  // 서버 통신 공통 헬퍼 (에러 핸들러 통일)
+  // 실패 시 기본적으로 알림창을 띄우고 reject하므로, 개별 호출부에서
+  // 매번 withFailureHandler를 따로 작성하지 않아도 된다.
+  // =========================================================================
+  function gsRun(fnName) {
+    const args = Array.prototype.slice.call(arguments, 1);
+    return new Promise(function(resolve, reject) {
+      google.script.run
+        .withSuccessHandler(resolve)
+        .withFailureHandler(function(err) {
+          showAlert('⚠️ 서버 오류가 발생했습니다: ' + (err && err.message ? err.message : err));
+          reject(err);
+        })[fnName].apply(null, args);
+    });
+  }
+
+  // =========================================================================
+  // XSS 방지: 사용자 입력 텍스트를 화면에 표시하기 전 이스케이프
+  // =========================================================================
+  function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str).replace(/[&<>"']/g, function(c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  // =========================================================================
+  // 연도 select 동적 생성 (하드코딩 제거, 서버 계산 학년도 기준 통일)
+  // =========================================================================
+  function buildYearOptions(selectedYear, count) {
+    count = count || 3;
+    const start = parseInt(CURRENT_ACADEMIC_YEAR, 10);
+    const target = selectedYear ? selectedYear.toString() : CURRENT_ACADEMIC_YEAR;
+    let html = '';
+    for (let i = 0; i < count; i++) {
+      const y = start - i;
+      html += `<option value="${y}"${y.toString() === target ? ' selected' : ''}>${y}학년도</option>`;
+    }
+    return html;
+  }
+
+  function populateYearSelects() {
+    ['student-sports-year', 'sports-year', 'admin-year-select', 'upload-year-select'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = buildYearOptions();
+    });
+  }
+
+  // =========================================================================
+  // 초기화 및 이벤트 리스너
+  // =========================================================================
+  window.onload = function() {
+    const classSelect = document.getElementById('reg-class');
+    const numSelect = document.getElementById('reg-num');
+    if (classSelect) { for(let i=1; i<=8; i++) classSelect.innerHTML += `<option value="${i}">${i}반</option>`; }
+    if (numSelect) { for(let i=1; i<=25; i++) numSelect.innerHTML += `<option value="${i}">${i}번</option>`; }
+
+    populateYearSelects();
+
+    function handleLoginEnter(event) { if (event.key === 'Enter') attemptLogin(); }
+    document.getElementById('login-id')?.addEventListener('keypress', handleLoginEnter);
+    document.getElementById('login-pw')?.addEventListener('keypress', handleLoginEnter);
+
+    function handleSignupEnter(event) { if (event.key === 'Enter') attemptSignup(); }
+    document.getElementById('reg-pw')?.addEventListener('keypress', handleSignupEnter);
+    document.getElementById('reg-pw-confirm')?.addEventListener('keypress', handleSignupEnter);
+    document.getElementById('reg-secret')?.addEventListener('keypress', handleSignupEnter);
+  };
+
+  // =========================================================================
+  // 공통 UI / 모달 제어 함수
+  // =========================================================================
+  function showAlert(msg) {
+    const alertBox = document.getElementById('customAlert'); const alertMsg = document.getElementById('customAlertMessage');
+    if (alertMsg && alertBox) { alertMsg.innerHTML = msg.replace(/\n/g, '<br>'); alertBox.classList.remove('hidden'); } else { alert(msg); }
+  }
+  function closeAlert() { document.getElementById('customAlert')?.classList.add('hidden'); }
+
+  function showConfirm(msg, yesCallback) {
+    let confirmBox = document.getElementById('customConfirm');
+    if(!confirmBox) {
+      confirmBox = document.createElement('div'); confirmBox.id = 'customConfirm'; confirmBox.className = 'custom-modal-overlay hidden';
+      confirmBox.innerHTML = '<div class="custom-modal-box"><div id="customConfirmMessage" class="custom-modal-text" style="margin-bottom:20px; font-size:1.05em; color:#333; line-height:1.5; word-break:keep-all;"></div><div style="display:flex; gap:10px;"><button class="custom-modal-btn" id="confirm-yes-btn" style="background:#1e3c72; flex:1;">확인</button><button class="custom-modal-btn" onclick="document.getElementById(\'customConfirm\').classList.add(\'hidden\')" style="background:#ccc; color:#333; flex:1;">취소</button></div></div>';
+      document.body.appendChild(confirmBox);
+    }
+    document.getElementById('customConfirmMessage').innerHTML = msg; confirmBox.classList.remove('hidden');
+    document.getElementById('confirm-yes-btn').onclick = function() { confirmBox.classList.add('hidden'); if(yesCallback) yesCallback(); };
+  }
+
+  function toggleView(viewId) {
+    document.getElementById('login-view')?.classList.add('hidden'); document.getElementById('signup-view')?.classList.add('hidden');
+    document.getElementById('main-view')?.classList.add('hidden'); document.getElementById('pe-main-view')?.classList.add('hidden');
+    document.getElementById(viewId)?.classList.remove('hidden'); window.scrollTo(0, 0);
+  }
+
+  function switchTab(tabName, parentId = null) {
+    const tabs = ['home', 'paps', 'sports', 'friendly', 'sportsclub-soccer', 'sportsclub-basketball', 'sportsclub-volleyball', 'sportsclub-badminton', 'afterschool-main', 'afterschool-small', 'lunch-gym', 'lunch-field', 'lunch-futsal'];
+    tabs.forEach(t => { const content = document.getElementById('content-' + t); if(content) content.classList.add('hidden'); });
+    const mainTabs = ['tab-home', 'tab-paps', 'tab-sports', 'tab-friendly', 'tab-sportsclub', 'tab-afterschool', 'tab-lunch'];
+    mainTabs.forEach(t => { const tab = document.getElementById(t); if(tab) tab.classList.remove('active'); });
+    const targetContent = document.getElementById('content-' + tabName); if(targetContent) targetContent.classList.remove('hidden');
+    if (parentId) { const p = document.getElementById(parentId); if (p) p.classList.add('active'); } else { const t = document.getElementById('tab-' + tabName); if(t) t.classList.add('active'); }
+    window.scrollTo(0, 0);
+  }
+
+  function openPETeacherView() { document.getElementById('main-view')?.classList.add('hidden'); document.getElementById('pe-main-view')?.classList.remove('hidden'); switchPETab('pe-home'); }
+  function closePETeacherView() { document.getElementById('pe-main-view')?.classList.add('hidden'); document.getElementById('main-view')?.classList.remove('hidden'); switchTab('home'); }
+
+  function switchPETab(peTabName) {
+    const peTabs = ['pe-home', 'pe-inventory-status', 'pe-purchase-list', 'pe-paps-manage', 'pe-sports-manage', 'pe-lunch-manage', 'pe-board-manage'];
+    peTabs.forEach(t => { const c = document.getElementById('content-' + t); if(c) c.classList.add('hidden'); });
+
+    const mainBtns = ['tab-pe-home', 'tab-pe-inventory-manage', 'tab-pe-paps-manage', 'tab-pe-sports-manage', 'tab-pe-lunch-manage', 'tab-pe-board-manage'];
+    mainBtns.forEach(b => { const btn = document.getElementById(b); if(btn) btn.classList.remove('active'); });
+
+    const targetC = document.getElementById('content-' + peTabName); if(targetC) targetC.classList.remove('hidden');
+
+    if(peTabName === 'pe-inventory-status' || peTabName === 'pe-purchase-list') {
+      document.getElementById('tab-pe-inventory-manage')?.classList.add('active');
+    } else {
+      document.getElementById('tab-' + peTabName)?.classList.add('active');
+    }
+
+    if (peTabName === 'pe-paps-manage') loadAdminGradeStats();
+    if (peTabName === 'pe-inventory-status') loadInventory();
+    if (peTabName === 'pe-purchase-list') loadPurchaseReqs();
+    window.scrollTo(0, 0);
+  }
+
+  // =========================================================================
+  // 회원가입 및 로그인
+  // =========================================================================
+  function changeSignupForm() {
+    const roleEl = document.querySelector('input[name="reg-role"]:checked'); if (!roleEl) return;
+    if(roleEl.value === '교사' || roleEl.value === '체육교사') {
+      document.getElementById('signup-student-form')?.classList.add('hidden'); document.getElementById('signup-teacher-form')?.classList.remove('hidden');
+    } else {
+      document.getElementById('signup-student-form')?.classList.remove('hidden'); document.getElementById('signup-teacher-form')?.classList.add('hidden');
+    }
+  }
+
+  function checkPasswordMatch() {
+    const pw = document.getElementById('reg-pw').value; const confirmPw = document.getElementById('reg-pw-confirm').value;
+    const matchText = document.getElementById('pw-match-text'); const mismatchText = document.getElementById('pw-mismatch-text');
+    if(!pw || !confirmPw) { if(matchText) matchText.style.display = 'none'; if(mismatchText) mismatchText.style.display = 'none'; return; }
+    if(pw === confirmPw) { if(matchText) matchText.style.display = 'block'; if(mismatchText) mismatchText.style.display = 'none'; }
+    else { if(matchText) matchText.style.display = 'none'; if(mismatchText) mismatchText.style.display = 'block'; }
+  }
+
+  function searchStudent() {
+    const g = document.getElementById('reg-grade').value, c = document.getElementById('reg-class').value, n = document.getElementById('reg-num').value;
+    if(!g || !c || !n) { showAlert("학년, 반, 번호를 모두 선택하세요."); return; }
+    const searchBtn = document.querySelector('#signup-student-form .btn-small'); if(searchBtn) { searchBtn.innerText = "조회 중..."; searchBtn.disabled = true; }
+    const nameInput = document.getElementById('reg-student-name'); if(nameInput) nameInput.value = "서버 통신 중...";
+    gsRun('findStudent', g, c, n).then(function(res) {
+      if(searchBtn) { searchBtn.innerText = "학생 조회"; searchBtn.disabled = false; }
+      if(res.success) { if(nameInput) nameInput.value = res.name; verifiedStudentName = res.name; } else { if(nameInput) nameInput.value = ""; showAlert(res.message); }
+    }).catch(function() { if(searchBtn) { searchBtn.innerText = "학생 조회"; searchBtn.disabled = false; } });
+  }
+
+  function attemptSignup() {
+    const roleEl = document.querySelector('input[name="reg-role"]:checked'); if (!roleEl) return;
+    const pw = document.getElementById('reg-pw').value; const pwConfirm = document.getElementById('reg-pw-confirm').value;
+    if(!pw || pw !== pwConfirm) { showAlert("비밀번호를 정확히 확인해주세요."); return; }
+    let finalId, finalName, secretCode;
+    if(roleEl.value === '학생') {
+      const g = document.getElementById('reg-grade').value, c = document.getElementById('reg-class').value, n = document.getElementById('reg-num').value;
+      if(!verifiedStudentName) { showAlert("먼저 학생 조회를 완료해주세요."); return; }
+      finalId = g + c.toString().padStart(2, '0') + n.toString().padStart(2, '0'); finalName = verifiedStudentName; secretCode = "";
+    } else {
+      finalName = document.getElementById('reg-teacher-name').value.trim(); finalId = finalName; secretCode = document.getElementById('reg-secret').value.trim();
+      if(!finalName || !secretCode) { showAlert("이름과 코드를 입력하세요."); return; }
+    }
+    const signupBtn = document.querySelector('#signup-view .btn-primary'); if(signupBtn) { signupBtn.innerText = "가입 처리 중..."; signupBtn.disabled = true; }
+    gsRun('registerUser', roleEl.value, finalId, pw, finalName, secretCode).then(function(res) {
+      if(signupBtn) { signupBtn.innerText = "가입하기"; signupBtn.disabled = false; }
+      if(res.success) { showAlert(res.message); toggleView('login-view'); } else { showAlert(res.message); }
+    }).catch(function() { if(signupBtn) { signupBtn.innerText = "가입하기"; signupBtn.disabled = false; } });
+  }
+
+  function attemptLogin() {
+    const roleEl = document.querySelector('input[name="login-role"]:checked'); if (!roleEl) return;
+    const id = document.getElementById('login-id').value.trim(); const pw = document.getElementById('login-pw').value.trim();
+    if(!id || !pw) return;
+    const loginBtn = document.querySelector('#login-view .btn-primary'); if(loginBtn) { loginBtn.innerText = "로딩 중..."; loginBtn.disabled = true; }
+    gsRun('verifyLogin', roleEl.value, id, pw).then(function(res) {
+      if(loginBtn) { loginBtn.innerText = "로그인"; loginBtn.disabled = false; }
+      if(res.success) {
+        currentUser = res; toggleView('main-view');
+        const msg = document.getElementById('welcome-msg'); if(msg) msg.innerText = `환영합니다, ${res.name} ${res.role === '학생' ? '학생' : '선생님'}!`;
+        if (res.role === '체육교사') document.getElementById('tab-pe-teacher')?.classList.remove('hidden');
+        else document.getElementById('tab-pe-teacher')?.classList.add('hidden');
+        loadBoard(); loadPaps(); switchTab('home');
+      } else { const lmsg = document.getElementById('login-msg'); if(lmsg) lmsg.innerText = res.message; }
+    }).catch(function() { if(loginBtn) { loginBtn.innerText = "로그인"; loginBtn.disabled = false; } });
+  }
+
+  function logout() {
+    if (currentUser?.token) gsRun('invalidateSession', currentUser.token).catch(function() {});
+    currentUser = null; document.getElementById('login-id').value = ''; document.getElementById('login-pw').value = '';
+    document.getElementById('tab-pe-teacher')?.classList.add('hidden'); toggleView('login-view'); switchTab('home');
+  }
+</script>

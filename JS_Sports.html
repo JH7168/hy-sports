@@ -1,0 +1,46 @@
+<script>
+  // =========================================================================
+  // 체육한마당 모듈
+  // =========================================================================
+  function randomizeBracket() {
+    let classes = ['1반', '2반', '3반', '4반', '5반', '6반', '7반', '8반'];
+    for (let i = classes.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [classes[i], classes[j]] = [classes[j], classes[i]]; }
+    for (let i = 0; i < 8; i++) { const el = document.getElementById('team-' + (i + 1)); if (el) el.value = classes[i]; }
+    showAlert("🎲 대진표 랜덤 뽑기 완료!");
+  }
+
+  function saveBracketDraft() {
+    const year = document.getElementById('sports-year').value, grade = document.getElementById('sports-grade').value, sport = document.getElementById('sports-type').value;
+    let bracketData = []; for(let i=1; i<=8; i++) { const el = document.getElementById('team-' + i); bracketData.push(el ? el.value : ""); }
+    const scheduleData = document.getElementById('sports-schedule').value.trim();
+    gsRun('saveSportsDraft', year, grade, sport, bracketData, scheduleData, currentUser.token).then(function(res) { showAlert(res.message); });
+  }
+
+  function publishBracket() {
+    showConfirm("🚨 정말로 배포하시겠습니까?<br>학생 화면에 지금 세팅한 대진표가 즉시 공개됩니다!", function() {
+      const year = document.getElementById('sports-year').value, grade = document.getElementById('sports-grade').value, sport = document.getElementById('sports-type').value;
+      gsRun('publishSportsData', year, grade, sport, currentUser.token).then(function(res) { showAlert(res.message); });
+    });
+  }
+
+  function revokeBracket() {
+    showConfirm("🛑 배포를 취소하시겠습니까?<br>학생 화면에서 대진표가 즉시 사라집니다.", function() {
+      const year = document.getElementById('sports-year').value, grade = document.getElementById('sports-grade').value, sport = document.getElementById('sports-type').value;
+      gsRun('unpublishSportsData', year, grade, sport, currentUser.token).then(function(res) { showAlert(res.message); });
+    });
+  }
+
+  function loadStudentSportsBracket() {
+    const year = document.getElementById('student-sports-year').value, grade = document.getElementById('student-sports-grade').value, sport = document.getElementById('student-sports-type').value;
+    const emptyArea = document.getElementById('student-bracket-empty'), displayArea = document.getElementById('student-bracket-area');
+    emptyArea.innerText = "서버에서 대진표를 가져오는 중입니다..."; emptyArea.style.display = 'block'; displayArea.style.display = 'none';
+    // 결과가 비어있는 정상 케이스(미배포)도 있어 실패 시 알림 대신 화면 안내문구로 대체한다.
+    google.script.run.withSuccessHandler(function(res) {
+      if(res.success) {
+        for(let i=0; i<8; i++) { document.getElementById('st-team-' + (i+1)).innerText = res.bracket[i] || "?"; }
+        document.getElementById('student-schedule-view').innerText = res.schedule || "등록된 상세 일정이 없습니다.";
+        emptyArea.style.display = 'none'; displayArea.style.display = 'block';
+      } else { emptyArea.innerText = "⚠️ " + res.message; }
+    }).withFailureHandler(function(err) { emptyArea.innerText = "서버 통신 오류: " + err.message; }).getSportsLiveData(year, grade, sport, currentUser.token);
+  }
+</script>

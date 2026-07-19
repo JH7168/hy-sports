@@ -1,0 +1,131 @@
+<script>
+  // =========================================================================
+  // 물품 관리 (Inventory & Purchase) 모듈
+  // =========================================================================
+
+  // 1. 장소 "직접입력" 시 텍스트 폼 토글
+  function toggleCustomLocInput() {
+    const sel = document.getElementById('add-inv-loc');
+    const custom = document.getElementById('add-inv-custom-loc');
+    if (sel.value === '직접입력') {
+      custom.classList.remove('hidden');
+      custom.focus();
+    } else {
+      custom.classList.add('hidden');
+      custom.value = '';
+    }
+  }
+
+  // 2. 신규 체육물품 등록
+  function addInventoryItem() {
+    let loc = document.getElementById('add-inv-loc').value;
+    if(loc === '직접입력') {
+      loc = document.getElementById('add-inv-custom-loc').value.trim();
+    }
+    const name = document.getElementById('add-inv-name').value.trim();
+    const spec = document.getElementById('add-inv-spec').value.trim();
+    const qty = document.getElementById('add-inv-qty').value;
+
+    if(!loc || !name || !qty) { showAlert("장소, 물품명, 수량을 모두 입력하세요."); return; }
+
+    const btn = document.querySelector('#content-pe-inventory-status .btn-primary');
+    btn.disabled = true; btn.innerText = "등록 중...";
+
+    gsRun('saveInventoryItem', loc, name, spec, qty, currentUser.token).then(function(res) {
+      btn.disabled = false; btn.innerText = "등록";
+      if(res.success) {
+        document.getElementById('add-inv-name').value = '';
+        document.getElementById('add-inv-spec').value = '';
+        document.getElementById('add-inv-qty').value = '';
+        showAlert("물품이 등록되었습니다.");
+        loadInventory();
+      } else { showAlert(res.message); }
+    }).catch(function() { btn.disabled = false; btn.innerText = "등록"; });
+  }
+
+  // 3. 체육물품 현황 불러오기
+  function loadInventory() {
+    const loc = document.getElementById('inventory-location-select').value;
+    const tbody = document.getElementById('inventory-tbody');
+    tbody.innerHTML = '<tr><td colspan="4" style="padding:20px; color:#999;">창고 데이터를 불러오는 중입니다...</td></tr>';
+    gsRun('getInventoryData', loc, currentUser.token).then(function(data) {
+      tbody.innerHTML = '';
+      if(data.length === 0) { tbody.innerHTML = '<tr><td colspan="4" style="padding:20px; color:#999;">해당 장소에 등록된 물품이 없습니다.</td></tr>'; return; }
+      data.forEach(item => {
+        tbody.innerHTML += `<tr style="border-bottom:1px solid #eee;"><td style="padding:10px; font-weight:bold; color:#4caf50;">${escapeHtml(item.loc)}</td><td style="padding:10px; font-weight:bold;">${escapeHtml(item.name)}</td><td style="padding:10px; color:#555;">${escapeHtml(item.spec)}</td><td style="padding:10px; font-weight:bold; color:#1e3c72;">${escapeHtml(item.qty)}개</td></tr>`;
+      });
+    });
+  }
+
+  // 4. 물품 구입 단가 계산
+  function calcReqTotal() {
+    const qty = parseInt(document.getElementById('req-qty').value) || 0;
+    const price = parseInt(document.getElementById('req-price').value) || 0;
+    const totalInput = document.getElementById('req-total');
+    if (qty > 0 && price > 0) { totalInput.value = (qty * price).toLocaleString() + " 원"; } else { totalInput.value = ""; }
+  }
+
+  // 5. 물품 구입 신청 제출
+  function submitPurchaseReq() {
+    const item = document.getElementById('req-item').value.trim();
+    const spec = document.getElementById('req-spec').value.trim();
+    const qty = parseInt(document.getElementById('req-qty').value) || 0;
+    const price = parseInt(document.getElementById('req-price').value) || 0;
+    const teacher = document.getElementById('req-teacher').value;
+    if(!item || qty <= 0 || price <= 0 || !teacher) { showAlert("내용, 수량, 예상단가, 신청교사를 모두 정확히 입력해주세요."); return; }
+
+    const btn = document.getElementById('btn-submit-req'); btn.disabled = true; btn.innerText = "서버 등록 중...";
+    const reqData = { item: item, spec: spec, qty: qty, price: price, total: (qty * price), teacher: teacher };
+
+    gsRun('savePurchaseRequest', reqData, currentUser.token).then(function(res) {
+      btn.disabled = false; btn.innerText = "📝 구입 목록에 추가";
+      if(res.success) {
+        document.getElementById('req-item').value = ''; document.getElementById('req-spec').value = '';
+        document.getElementById('req-qty').value = ''; document.getElementById('req-price').value = '';
+        document.getElementById('req-total').value = ''; document.getElementById('req-teacher').value = '';
+        showAlert("물품 구입 신청이 추가되었습니다."); loadPurchaseReqs();
+      } else { showAlert(res.message); }
+    }).catch(function() { btn.disabled = false; btn.innerText = "📝 구입 목록에 추가"; });
+  }
+
+  // 6. 물품 구입 신청 리스트 불러오기
+  function loadPurchaseReqs() {
+    const tbody = document.getElementById('purchase-req-tbody');
+    tbody.innerHTML = '<tr><td colspan="7" style="padding:20px; color:#999;">신청 내역을 불러오는 중입니다...</td></tr>';
+    gsRun('getPurchaseRequests', currentUser.token).then(function(res) {
+      document.getElementById('total-teacher-박정환').innerText = (res.totals['박정환'] || 0).toLocaleString() + "원";
+      document.getElementById('total-teacher-문승연').innerText = (res.totals['문승연'] || 0).toLocaleString() + "원";
+      document.getElementById('total-teacher-양서경').innerText = (res.totals['양서경'] || 0).toLocaleString() + "원";
+
+      tbody.innerHTML = '';
+      if(res.list.length === 0) { tbody.innerHTML = '<tr><td colspan="7" style="padding:20px; color:#999;">신청된 물품 내역이 없습니다.</td></tr>'; return; }
+      res.list.forEach(item => {
+        tbody.innerHTML += `<tr style="border-bottom:1px solid #eee;"><td style="padding:8px; color:#888;">${escapeHtml(item[0])}</td><td style="padding:8px; font-weight:bold;">${escapeHtml(item[1])}</td><td style="padding:8px; color:#555;">${escapeHtml(item[2])}</td><td style="padding:8px;">${escapeHtml(item[3])}</td><td style="padding:8px;">${parseInt(item[4]).toLocaleString()}</td><td style="padding:8px; font-weight:bold; color:#d32f2f;">${parseInt(item[5]).toLocaleString()}원</td><td style="padding:8px; font-weight:bold; color:#1e3c72;">${escapeHtml(item[6])}</td></tr>`;
+      });
+    });
+  }
+
+  // 7. 물품구입명단 엑셀 다운로드 (SheetJS 활용)
+  function downloadPurchaseExcel() {
+    const table = document.getElementById("purchase-table");
+    if(!table) return;
+
+    const wb = XLSX.utils.table_to_book(table, {sheet: "물품구입명단"});
+
+    const ws = wb.Sheets["물품구입명단"];
+    if(ws) {
+      ws['!cols'] = [
+        {wch: 8},  // 순번
+        {wch: 25}, // 내용
+        {wch: 15}, // 규격
+        {wch: 8},  // 수량
+        {wch: 15}, // 예상단가
+        {wch: 15}, // 예상금액
+        {wch: 12}  // 신청교사
+      ];
+    }
+
+    const dateStr = new Date().toLocaleDateString().replace(/\./g, '').replace(/ /g, '_');
+    XLSX.writeFile(wb, `한영고_체육부_물품구입신청명단_${dateStr}.xlsx`);
+  }
+</script>

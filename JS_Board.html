@@ -1,0 +1,22 @@
+<script>
+  // =========================================================================
+  // 공지사항 모듈
+  // =========================================================================
+  function loadBoard() {
+    gsRun('getBoardData', currentUser.token).then(function(data) {
+      const container = document.getElementById('home-notice-list'); if(!container) return; container.innerHTML = '';
+      if(data.length === 0) { container.innerHTML = '<div style="color:#999; text-align:center; padding:20px;">등록된 공지사항이 없습니다.</div>'; return; }
+      data.forEach(item => { container.innerHTML += `<div style="border-bottom: 1px solid #f0f0f0; padding: 15px 0;"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;"><div style="font-size:1.15em; font-weight:bold; color:#333;">${escapeHtml(item.title)}</div><div style="font-size:0.8em; color:white; background:#1e3c72; padding:3px 8px; border-radius:12px;">${escapeHtml(item.date)}</div></div><div style="color:#555; white-space:pre-wrap; font-size:0.95em; line-height:1.5;">${escapeHtml(item.content)}</div></div>`; });
+    });
+  }
+
+  function submitNotice() {
+    const title = document.getElementById('notice-title').value.trim(); const content = document.getElementById('notice-content').value.trim();
+    if(!title || !content) { showAlert("제목과 내용을 모두 입력해주세요!"); return; }
+    const btn = document.getElementById('btn-submit-notice'); if(btn) { btn.disabled = true; btn.innerText = "서버 등록 중..."; }
+    gsRun('saveNotice', title, content, currentUser.token).then(function(res) {
+      if(btn) { btn.disabled = false; btn.innerText = "🚀 새 공지사항 학생들에게 띄우기"; }
+      if(res.success) { showAlert(res.message); document.getElementById('notice-title').value = ""; document.getElementById('notice-content').value = ""; loadBoard(); } else { showAlert(res.message); }
+    }).catch(function() { if(btn) { btn.disabled = false; btn.innerText = "🚀 새 공지사항 학생들에게 띄우기"; } });
+  }
+</script>
