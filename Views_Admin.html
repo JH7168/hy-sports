@@ -6,7 +6,7 @@
     <div class="header-top">
       <div class="header-title-group" style="cursor: pointer;" onclick="switchPETab('pe-home')">
         <img src="https://lh3.googleusercontent.com/d/19-2im0ZDmLGk7YWgcPgTQscBnS-0tRTs" alt="한영고 로고" class="school-logo">
-        <h1>한영고등학교 체육부 [관리자 전용]</h1>
+        <h1>한영고등학교 체육인성부 [관리자 전용]</h1>
       </div>
       <button class="logout-btn" onclick="logout()">로그아웃</button>
     </div>
@@ -19,6 +19,16 @@
         <div class="dropdown-content">
           <button onclick="switchPETab('pe-inventory-status', 'tab-pe-inventory-manage')">체육물품현황</button>
           <button onclick="switchPETab('pe-purchase-list', 'tab-pe-inventory-manage')">물품구입명단</button>
+        </div>
+      </div>
+
+      <div class="dropdown">
+        <button id="tab-pe-physprep-manage" class="pe-nav-btn">체대입시반 ▾</button>
+        <div class="dropdown-content">
+          <button onclick="switchPETab('pe-physprep-roster', 'tab-pe-physprep-manage')">명단관리</button>
+          <button onclick="switchPETab('pe-physprep-events', 'tab-pe-physprep-manage')">종목관리</button>
+          <button onclick="switchPETab('pe-physprep-input', 'tab-pe-physprep-manage')">기록입력</button>
+          <button onclick="switchPETab('pe-physprep-ranking', 'tab-pe-physprep-manage')">랭킹</button>
         </div>
       </div>
 
@@ -118,6 +128,91 @@
             <tbody id="purchase-req-tbody"><tr><td colspan="7" style="padding:20px; color:#999;">데이터를 불러오는 중입니다...</td></tr></tbody>
           </table>
         </div>
+      </div>
+    </div>
+
+    <!-- [관리자] 체대입시반 - 명단관리 -->
+    <div id="content-pe-physprep-roster" class="hidden">
+      <div class="card" style="border-top: 5px solid #6a1b9a; margin-bottom: 20px;">
+        <h3 style="margin-top:0; color:#4a148c;">🎯 체대입시반 명단 관리</h3>
+        <p style="font-size:0.9em; color:#666; margin-bottom:15px;">여기에 등록된 학생만 학생 화면의 '방과후 &gt; 소규모수업' 탭을 이용할 수 있습니다. 명단에서 삭제해도 과거 측정 기록은 그대로 보관됩니다.</p>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; background:#f0f2f5; padding:15px; border-radius:8px; margin-bottom:15px;">
+          <select id="physprep-add-grade" class="input-field" style="flex:1; min-width:70px; margin:0;"><option value="">학년</option><option value="1">1학년</option><option value="2">2학년</option><option value="3">3학년</option></select>
+          <select id="physprep-add-class" class="input-field" style="flex:1; min-width:70px; margin:0;"><option value="">반</option></select>
+          <select id="physprep-add-num" class="input-field" style="flex:1; min-width:70px; margin:0;"><option value="">번호</option></select>
+          <input type="text" id="physprep-add-name" class="input-field" placeholder="조회 결과" readonly style="flex:1.5; min-width:100px; margin:0; background:#e8f0fe; text-align:center;">
+          <button class="btn-small" onclick="physPrepSearchStudent()" style="margin:0;">조회</button>
+          <button class="btn-primary" id="btn-physprep-add" onclick="physPrepAddStudent()" disabled style="margin:0; flex:1; min-width:90px; background:#6a1b9a;">명단추가</button>
+        </div>
+        <div style="overflow-x:auto;">
+          <table style="width:100%; border-collapse:collapse; text-align:center; font-size:0.95em;">
+            <thead><tr style="background:#f3e5f5; border-bottom:2px solid #ccc;"><th style="padding:10px;">학번</th><th style="padding:10px;">이름</th><th style="padding:10px;">학년</th><th style="padding:10px;">등록일</th><th style="padding:10px;">관리</th></tr></thead>
+            <tbody id="physprep-roster-tbody"><tr><td colspan="5" style="padding:20px; color:#999;">불러오는 중입니다...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- [관리자] 체대입시반 - 종목관리 -->
+    <div id="content-pe-physprep-events" class="hidden">
+      <div class="card" style="border-top: 5px solid #6a1b9a;">
+        <h3 style="margin-top:0; color:#4a148c;">🏷️ 측정 종목 관리</h3>
+        <p style="font-size:0.9em; color:#666; margin-bottom:15px;">종목은 나중에 얼마든지 추가할 수 있습니다. 기록 방향(클수록/작을수록 좋음)을 정확히 선택해야 랭킹이 올바르게 정렬됩니다.</p>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; background:#f0f2f5; padding:15px; border-radius:8px; margin-bottom:15px;">
+          <input type="text" id="physprep-event-name" class="input-field" placeholder="종목명 (예: 팔굽혀펴기)" style="flex:2; min-width:140px; margin:0;">
+          <input type="text" id="physprep-event-unit" class="input-field" placeholder="단위 (예: 회, cm, 초)" style="flex:1; min-width:80px; margin:0;">
+          <select id="physprep-event-direction" class="input-field" style="flex:1; min-width:150px; margin:0;">
+            <option value="HIGH">기록이 클수록 좋음</option>
+            <option value="LOW">기록이 작을수록 좋음</option>
+          </select>
+          <button class="btn-primary" onclick="physPrepAddEvent()" style="margin:0; flex:1; min-width:90px; background:#6a1b9a;">종목 등록</button>
+        </div>
+        <div style="overflow-x:auto;">
+          <table style="width:100%; border-collapse:collapse; text-align:center; font-size:0.95em;">
+            <thead><tr style="background:#f3e5f5; border-bottom:2px solid #ccc;"><th style="padding:10px;">종목명</th><th style="padding:10px;">단위</th><th style="padding:10px;">방향</th><th style="padding:10px;">상태</th><th style="padding:10px;">관리</th></tr></thead>
+            <tbody id="physprep-events-tbody"><tr><td colspan="5" style="padding:20px; color:#999;">불러오는 중입니다...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- [관리자] 체대입시반 - 공식측정 기록입력 -->
+    <div id="content-pe-physprep-input" class="hidden">
+      <div class="card" style="border-top: 5px solid #6a1b9a;">
+        <h3 style="margin-top:0; color:#4a148c;">📝 공식측정 기록 입력 (3월·6월·9월)</h3>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:15px;">
+          <select id="physprep-input-year" class="input-field" style="flex:1; min-width:100px; margin:0;"></select>
+          <select id="physprep-input-round" class="input-field" style="flex:1; min-width:100px; margin:0;"><option value="3">3월</option><option value="6">6월</option><option value="9">9월</option></select>
+          <select id="physprep-input-event" class="input-field" style="flex:1; min-width:150px; margin:0;"></select>
+          <button class="btn-primary" onclick="physPrepLoadEntryTable()" style="flex:1; min-width:90px; margin:0; background:#6a1b9a;">불러오기</button>
+        </div>
+        <div style="overflow-x:auto;">
+          <table style="width:100%; border-collapse:collapse; text-align:center; font-size:0.95em;">
+            <thead><tr style="background:#f3e5f5; border-bottom:2px solid #ccc;"><th style="padding:10px;">학번</th><th style="padding:10px;">이름</th><th style="padding:10px;">기록</th></tr></thead>
+            <tbody id="physprep-entry-tbody"><tr><td colspan="3" style="padding:20px; color:#999;">연도/회차/종목을 선택하고 [불러오기]를 눌러주세요.</td></tr></tbody>
+          </table>
+        </div>
+        <button class="btn-primary" id="btn-physprep-save-entry" onclick="physPrepSaveEntryTable()" style="background:#4caf50; display:none;">💾 기록 저장</button>
+      </div>
+    </div>
+
+    <!-- [관리자] 체대입시반 - 랭킹 -->
+    <div id="content-pe-physprep-ranking" class="hidden">
+      <div class="card" style="border-top: 5px solid #6a1b9a;">
+        <h3 style="margin-top:0; color:#4a148c;">🏆 종목별 랭킹</h3>
+        <p style="font-size:0.85em; color:#888; margin-top:-8px;">3·6·9월 공식측정 기록만 랭킹에 반영됩니다.</p>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:15px;">
+          <select id="physprep-admin-rank-event" class="input-field" style="flex:1; min-width:140px; margin:0;"></select>
+          <select id="physprep-admin-rank-mode" class="input-field" style="flex:1; min-width:140px; margin:0;" onchange="physPrepToggleRankYear('physprep-admin-rank-mode','physprep-admin-rank-year')">
+            <option value="all">역대 전체기간</option>
+            <option value="year">연도별</option>
+            <option value="window:3">최근 3년</option>
+            <option value="window:5">최근 5년</option>
+          </select>
+          <select id="physprep-admin-rank-year" class="input-field hidden" style="flex:1; min-width:100px; margin:0;"></select>
+          <button class="btn-primary" onclick="physPrepLoadRanking('physprep-admin-rank-event','physprep-admin-rank-mode','physprep-admin-rank-year','physprep-admin-ranking-result')" style="flex:1; min-width:90px; margin:0; background:#6a1b9a;">조회</button>
+        </div>
+        <div id="physprep-admin-ranking-result"></div>
       </div>
     </div>
 

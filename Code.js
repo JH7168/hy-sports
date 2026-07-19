@@ -57,6 +57,9 @@ function setupSystemSheets() {
     purchaseSheet.getRange("A1:H1").setBackground("#2196f3").setFontColor("white").setFontWeight("bold");
   }
 
+  // 소규모수업 - 체대입시반 시트 세팅
+  setupPhysPrepSheets();
+
   // 교사 가입 인증 코드: 소스코드가 아닌 스크립트 속성에 보관 (없을 때만 최초 1회 초기화)
   const props = PropertiesService.getScriptProperties();
   if (!props.getProperty('PE_TEACHER_CODE')) props.setProperty('PE_TEACHER_CODE', 'PY4312');
@@ -65,5 +68,5 @@ function setupSystemSheets() {
 
 function doGet() {
   setupSystemSheets();
-  return HtmlService.createTemplateFromFile('Index').evaluate().setTitle('한영고 체육부').addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  return HtmlService.createTemplateFromFile('Index').evaluate().setTitle('한영고 체육인성부').addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }

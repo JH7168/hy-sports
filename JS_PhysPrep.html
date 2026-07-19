@@ -1,0 +1,237 @@
+<script>
+  // =========================================================================
+  // 소규모수업 - 체대입시반 모듈
+  // =========================================================================
+  let physPrepEventsCache = [];
+  let physPrepVerifiedStudent = null;
+
+  function physPrepRoundLabel(round) { return round + '월'; }
+
+  function physPrepBuildRankingTableHtml(res) {
+    if (!res.success) return `<div class="card" style="color:red; text-align:center;">${escapeHtml(res.message)}</div>`;
+    if (!res.ranking || res.ranking.length === 0) return `<div class="card" style="color:#999; text-align:center;">아직 등록된 공식기록이 없습니다.</div>`;
+    const rows = res.ranking.map((r, idx) => `<tr style="border-bottom:1px solid #eee;"><td style="padding:8px; font-weight:bold; color:${idx === 0 ? '#d32f2f' : '#333'};">${idx + 1}위</td><td style="padding:8px; font-weight:bold;">${escapeHtml(r.name)}</td><td style="padding:8px; color:#888;">${escapeHtml(r.id)}</td><td style="padding:8px; font-weight:bold; color:#6a1b9a;">${escapeHtml(r.value)}${escapeHtml(res.event.unit)}</td><td style="padding:8px; color:#888;">${r.year}년 ${physPrepRoundLabel(r.round)}</td></tr>`).join('');
+    return `<div style="overflow-x:auto;"><table style="width:100%; border-collapse:collapse; text-align:center; font-size:0.95em;"><thead><tr style="background:#f3e5f5; border-bottom:2px solid #ccc;"><th style="padding:8px;">순위</th><th style="padding:8px;">이름</th><th style="padding:8px;">학번</th><th style="padding:8px;">기록</th><th style="padding:8px;">달성 시점</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+
+  function physPrepToggleRankYear(modeId, yearId) {
+    const mode = document.getElementById(modeId).value;
+    document.getElementById(yearId).classList.toggle('hidden', mode !== 'year');
+  }
+
+  function physPrepLoadRanking(eventSelectId, modeSelectId, yearSelectId, resultId) {
+    const eventId = document.getElementById(eventSelectId).value;
+    const modeSel = document.getElementById(modeSelectId).value;
+    const mode = modeSel === 'year' ? ('year:' + document.getElementById(yearSelectId).value) : modeSel;
+    if (!eventId) { showAlert('종목을 선택하세요.'); return; }
+    document.getElementById(resultId).innerHTML = `<div style="text-align:center; color:#999; padding:15px;">불러오는 중입니다...</div>`;
+    gsRun('getPhysPrepRanking', eventId, mode, currentUser.token).then(function(res) {
+      document.getElementById(resultId).innerHTML = physPrepBuildRankingTableHtml(res);
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // 학생 화면 (내 기록 / 자율 입력 / 랭킹 조회)
+  // -------------------------------------------------------------------------
+  function loadPhysPrepStudentView() {
+    const container = document.getElementById('physprep-student-container');
+    container.innerHTML = `<div class="card" style="text-align:center; color:#999;">불러오는 중입니다...</div>`;
+    gsRun('getPhysPrepEvents', currentUser.token).then(function(evRes) {
+      physPrepEventsCache = evRes.success ? evRes.list.filter(e => e.active) : [];
+      if (currentUser.role === '학생') {
+        gsRun('getMyPhysPrepRecords', currentUser.token).then(function(res) { renderPhysPrepStudentView(res); });
+      } else {
+        renderPhysPrepStudentView({ success: false, message: '체대입시반 명단에 등록된 학생만 개인 기록·자율입력을 이용할 수 있습니다. 아래에서 랭킹은 조회할 수 있습니다.' });
+      }
+    });
+  }
+
+  function renderPhysPrepStudentView(res) {
+    const container = document.getElementById('physprep-student-container');
+    let html = '';
+
+    if (!res.success) {
+      html += `<div class="card" style="text-align:center; color:#666;">${escapeHtml(res.message)}</div>`;
+    } else {
+      const eventIds = Object.keys(res.official);
+      html += `<div class="card" style="border-top:5px solid #6a1b9a;"><h3 style="margin-top:0; color:#4a148c;">📈 나의 공식측정 기록</h3>`;
+      if (eventIds.length === 0) {
+        html += `<div style="color:#999; text-align:center; padding:10px;">아직 등록된 공식측정(3·6·9월) 기록이 없습니다.</div>`;
+      } else {
+        eventIds.forEach(eid => {
+          const ev = res.official[eid];
+          const latest = ev.records[ev.records.length - 1];
+          let deltaHtml = '';
+          if (latest.delta !== null) {
+            const arrow = latest.delta === 0 ? '- 동일' : (latest.improved ? '▲ 향상' : '▼ 하락');
+            const color = latest.delta === 0 ? '#888' : (latest.improved ? '#2e7d32' : '#d32f2f');
+            deltaHtml = `<span style="color:${color}; font-weight:bold; margin-left:8px;">${arrow} ${Math.abs(latest.delta)}${escapeHtml(ev.unit)} (전회 대비)</span>`;
+          }
+          html += `<div style="background:#f7f2fa; border-radius:8px; padding:12px 15px; margin-bottom:10px;"><div style="font-weight:bold; color:#4a148c;">${escapeHtml(ev.name)}</div><div style="margin-top:5px;">최근 기록(${latest.year}년 ${physPrepRoundLabel(latest.round)}): <b>${escapeHtml(latest.value)}${escapeHtml(ev.unit)}</b>${deltaHtml}</div></div>`;
+        });
+      }
+      html += `</div>`;
+
+      html += `<div class="card" style="border-top:5px solid #6a1b9a;"><h3 style="margin-top:0; color:#4a148c;">✍️ 내 기록 직접 입력 (평상시 연습 기록)</h3><div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;"><select id="physprep-self-event" class="input-field" style="flex:2; min-width:140px; margin:0;">${physPrepEventsCache.map(e => `<option value="${e.id}">${escapeHtml(e.name)} (${escapeHtml(e.unit)})</option>`).join('') || '<option value="">등록된 종목이 없습니다</option>'}</select><input type="number" step="any" id="physprep-self-value" class="input-field" placeholder="기록값" style="flex:1; min-width:90px; margin:0;"><button class="btn-primary" onclick="physPrepSubmitSelfRecord()" style="flex:1; min-width:90px; margin:0; background:#6a1b9a;">기록 등록</button></div>`;
+      if (res.self.length > 0) {
+        html += `<div style="margin-top:15px;"><div style="font-weight:bold; color:#666; margin-bottom:8px; font-size:0.9em;">최근 연습 기록 (참고용, 랭킹에는 반영되지 않습니다)</div>`;
+        res.self.slice(0, 10).forEach(s => { html += `<div style="display:flex; justify-content:space-between; gap:10px; padding:6px 0; border-bottom:1px solid #eee; font-size:0.92em;"><span>${escapeHtml(s.eventName)}</span><span style="font-weight:bold; color:#6a1b9a;">${escapeHtml(s.value)}${escapeHtml(s.unit)}</span><span style="color:#999;">${escapeHtml(s.date)}</span></div>`; });
+        html += `</div>`;
+      }
+      html += `</div>`;
+    }
+
+    html += `<div class="card" style="border-top:5px solid #6a1b9a;"><h3 style="margin-top:0; color:#4a148c;">🏆 종목별 랭킹 조회</h3><p style="font-size:0.85em; color:#888; margin-top:-8px;">3·6·9월 공식측정 기록만 랭킹에 반영됩니다.</p><div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:15px;"><select id="physprep-rank-event" class="input-field" style="flex:1; min-width:140px; margin:0;">${physPrepEventsCache.map(e => `<option value="${e.id}">${escapeHtml(e.name)}</option>`).join('') || '<option value="">등록된 종목이 없습니다</option>'}</select><select id="physprep-rank-mode" class="input-field" style="flex:1; min-width:140px; margin:0;" onchange="physPrepToggleRankYear('physprep-rank-mode','physprep-rank-year')"><option value="all">역대 전체기간</option><option value="year">연도별</option><option value="window:3">최근 3년</option><option value="window:5">최근 5년</option></select><select id="physprep-rank-year" class="input-field hidden" style="flex:1; min-width:100px; margin:0;"></select><button class="btn-primary" onclick="physPrepLoadRanking('physprep-rank-event','physprep-rank-mode','physprep-rank-year','physprep-rank-result')" style="flex:1; min-width:90px; margin:0; background:#6a1b9a;">조회</button></div><div id="physprep-rank-result"></div></div>`;
+
+    container.innerHTML = html;
+    const yearSel = document.getElementById('physprep-rank-year'); if (yearSel) yearSel.innerHTML = buildYearOptions();
+  }
+
+  function physPrepSubmitSelfRecord() {
+    const eventId = document.getElementById('physprep-self-event').value;
+    const value = document.getElementById('physprep-self-value').value;
+    if (!eventId || value === '') { showAlert('종목과 기록값을 입력하세요.'); return; }
+    gsRun('addSelfRecord', eventId, value, currentUser.token).then(function(res) {
+      if (res.success) { showAlert('기록이 저장되었습니다.'); loadPhysPrepStudentView(); } else { showAlert(res.message); }
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // 관리자 - 명단관리
+  // -------------------------------------------------------------------------
+  function loadPhysPrepRoster() {
+    const classSel = document.getElementById('physprep-add-class'), numSel = document.getElementById('physprep-add-num');
+    if (classSel && classSel.options.length <= 1) { for (let i = 1; i <= 8; i++) classSel.innerHTML += `<option value="${i}">${i}반</option>`; }
+    if (numSel && numSel.options.length <= 1) { for (let i = 1; i <= 25; i++) numSel.innerHTML += `<option value="${i}">${i}번</option>`; }
+    document.getElementById('physprep-add-name').value = '';
+    document.getElementById('btn-physprep-add').disabled = true;
+    physPrepVerifiedStudent = null;
+
+    const tbody = document.getElementById('physprep-roster-tbody');
+    tbody.innerHTML = `<tr><td colspan="5" style="padding:20px; color:#999;">불러오는 중입니다...</td></tr>`;
+    gsRun('getPhysPrepRoster', currentUser.token).then(function(res) {
+      if (!res.success || res.list.length === 0) { tbody.innerHTML = `<tr><td colspan="5" style="padding:20px; color:#999;">등록된 학생이 없습니다.</td></tr>`; return; }
+      tbody.innerHTML = '';
+      res.list.forEach(s => {
+        tbody.innerHTML += `<tr style="border-bottom:1px solid #eee;"><td style="padding:8px;">${escapeHtml(s.id)}</td><td style="padding:8px; font-weight:bold;">${escapeHtml(s.name)}</td><td style="padding:8px;">${escapeHtml(s.grade)}학년</td><td style="padding:8px; color:#888;">${escapeHtml(s.regDate)}</td><td style="padding:8px;"><button class="btn-small" style="background:#d32f2f;" onclick="physPrepRemoveStudent('${escapeHtml(s.id)}')">삭제</button></td></tr>`;
+      });
+    });
+  }
+
+  function physPrepSearchStudent() {
+    const g = document.getElementById('physprep-add-grade').value, c = document.getElementById('physprep-add-class').value, n = document.getElementById('physprep-add-num').value;
+    const nameInput = document.getElementById('physprep-add-name'), addBtn = document.getElementById('btn-physprep-add');
+    if (!g || !c || !n) { showAlert('학년, 반, 번호를 모두 선택하세요.'); return; }
+    nameInput.value = '조회 중...'; addBtn.disabled = true; physPrepVerifiedStudent = null;
+    gsRun('findStudent', g, c, n).then(function(res) {
+      if (res.success) {
+        nameInput.value = res.name;
+        physPrepVerifiedStudent = g + c.toString().padStart(2, '0') + n.toString().padStart(2, '0');
+        addBtn.disabled = false;
+      } else { nameInput.value = ''; showAlert(res.message); }
+    });
+  }
+
+  function physPrepAddStudent() {
+    if (!physPrepVerifiedStudent) return;
+    gsRun('addPhysPrepStudent', physPrepVerifiedStudent, currentUser.token).then(function(res) {
+      showAlert(res.message);
+      if (res.success) { loadPhysPrepRoster(); }
+    });
+  }
+
+  function physPrepRemoveStudent(studentId) {
+    showConfirm('정말 명단에서 삭제하시겠습니까?<br>과거 측정 기록은 삭제되지 않고 그대로 보관됩니다.', function() {
+      gsRun('removePhysPrepStudent', studentId, currentUser.token).then(function(res) { showAlert(res.message); loadPhysPrepRoster(); });
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // 관리자 - 종목관리
+  // -------------------------------------------------------------------------
+  function loadPhysPrepEventsAdmin() {
+    const tbody = document.getElementById('physprep-events-tbody');
+    tbody.innerHTML = `<tr><td colspan="5" style="padding:20px; color:#999;">불러오는 중입니다...</td></tr>`;
+    gsRun('getPhysPrepEvents', currentUser.token).then(function(res) {
+      physPrepEventsCache = res.success ? res.list : [];
+      if (physPrepEventsCache.length === 0) { tbody.innerHTML = `<tr><td colspan="5" style="padding:20px; color:#999;">등록된 종목이 없습니다. 위에서 새 종목을 등록하세요.</td></tr>`; return; }
+      tbody.innerHTML = '';
+      physPrepEventsCache.forEach(e => {
+        tbody.innerHTML += `<tr style="border-bottom:1px solid #eee;"><td style="padding:8px; font-weight:bold;">${escapeHtml(e.name)}</td><td style="padding:8px;">${escapeHtml(e.unit)}</td><td style="padding:8px;">${e.direction === 'LOW' ? '작을수록 좋음' : '클수록 좋음'}</td><td style="padding:8px; color:${e.active ? '#2e7d32' : '#999'}; font-weight:bold;">${e.active ? '사용중' : '비활성'}</td><td style="padding:8px;"><button class="btn-small" style="background:${e.active ? '#999' : '#4caf50'};" onclick="physPrepToggleEventActive('${e.id}', ${!e.active})">${e.active ? '비활성화' : '활성화'}</button></td></tr>`;
+      });
+    });
+  }
+
+  function physPrepAddEvent() {
+    const name = document.getElementById('physprep-event-name').value.trim();
+    const unit = document.getElementById('physprep-event-unit').value.trim();
+    const direction = document.getElementById('physprep-event-direction').value;
+    if (!name) { showAlert('종목명을 입력하세요.'); return; }
+    gsRun('addPhysPrepEvent', name, unit, direction, currentUser.token).then(function(res) {
+      showAlert(res.message);
+      if (res.success) { document.getElementById('physprep-event-name').value = ''; document.getElementById('physprep-event-unit').value = ''; loadPhysPrepEventsAdmin(); }
+    });
+  }
+
+  function physPrepToggleEventActive(eventId, newActive) {
+    const ev = physPrepEventsCache.find(e => e.id === eventId);
+    if (!ev) return;
+    gsRun('updatePhysPrepEvent', eventId, ev.name, ev.unit, ev.direction, newActive, currentUser.token).then(function(res) { showAlert(res.message); loadPhysPrepEventsAdmin(); });
+  }
+
+  // -------------------------------------------------------------------------
+  // 관리자 - 공식측정 기록 입력
+  // -------------------------------------------------------------------------
+  function loadPhysPrepEntryForm() {
+    document.getElementById('physprep-input-year').innerHTML = buildYearOptions();
+    const eventSel = document.getElementById('physprep-input-event');
+    gsRun('getPhysPrepEvents', currentUser.token).then(function(res) {
+      physPrepEventsCache = res.success ? res.list.filter(e => e.active) : [];
+      eventSel.innerHTML = physPrepEventsCache.map(e => `<option value="${e.id}">${escapeHtml(e.name)} (${escapeHtml(e.unit)})</option>`).join('') || '<option value="">등록된 종목 없음</option>';
+    });
+    document.getElementById('physprep-entry-tbody').innerHTML = `<tr><td colspan="3" style="padding:20px; color:#999;">연도/회차/종목을 선택하고 [불러오기]를 눌러주세요.</td></tr>`;
+    document.getElementById('btn-physprep-save-entry').style.display = 'none';
+  }
+
+  function physPrepLoadEntryTable() {
+    const year = document.getElementById('physprep-input-year').value;
+    const round = document.getElementById('physprep-input-round').value;
+    const eventId = document.getElementById('physprep-input-event').value;
+    if (!eventId) { showAlert('종목을 선택하세요.'); return; }
+    const tbody = document.getElementById('physprep-entry-tbody');
+    tbody.innerHTML = `<tr><td colspan="3" style="padding:20px; color:#999;">불러오는 중입니다...</td></tr>`;
+    gsRun('getOfficialRecordsForEntry', year, round, eventId, currentUser.token).then(function(res) {
+      if (!res.success || res.roster.length === 0) { tbody.innerHTML = `<tr><td colspan="3" style="padding:20px; color:#999;">명단관리에서 학생을 먼저 등록하세요.</td></tr>`; document.getElementById('btn-physprep-save-entry').style.display = 'none'; return; }
+      tbody.innerHTML = '';
+      res.roster.forEach(s => {
+        tbody.innerHTML += `<tr style="border-bottom:1px solid #eee;"><td style="padding:8px;">${escapeHtml(s.id)}</td><td style="padding:8px; font-weight:bold;">${escapeHtml(s.name)}</td><td style="padding:8px;"><input type="number" step="any" class="input-field physprep-entry-input" data-id="${escapeHtml(s.id)}" data-name="${escapeHtml(s.name)}" value="${escapeHtml(s.value)}" style="margin:0; text-align:center;"></td></tr>`;
+      });
+      document.getElementById('btn-physprep-save-entry').style.display = 'block';
+    });
+  }
+
+  function physPrepSaveEntryTable() {
+    const year = document.getElementById('physprep-input-year').value;
+    const round = document.getElementById('physprep-input-round').value;
+    const eventId = document.getElementById('physprep-input-event').value;
+    const inputs = document.querySelectorAll('.physprep-entry-input');
+    const records = Array.prototype.map.call(inputs, function(el) { return { id: el.dataset.id, name: el.dataset.name, value: el.value }; });
+    const btn = document.getElementById('btn-physprep-save-entry'); btn.disabled = true; btn.innerText = '저장 중...';
+    gsRun('saveOfficialRecords', year, round, eventId, records, currentUser.token).then(function(res) {
+      btn.disabled = false; btn.innerText = '💾 기록 저장';
+      showAlert(res.message);
+    }).catch(function() { btn.disabled = false; btn.innerText = '💾 기록 저장'; });
+  }
+
+  // -------------------------------------------------------------------------
+  // 관리자 - 랭킹
+  // -------------------------------------------------------------------------
+  function loadPhysPrepRankingAdmin() {
+    gsRun('getPhysPrepEvents', currentUser.token).then(function(res) {
+      physPrepEventsCache = res.success ? res.list : [];
+      document.getElementById('physprep-admin-rank-event').innerHTML = physPrepEventsCache.map(e => `<option value="${e.id}">${escapeHtml(e.name)}</option>`).join('') || '<option value="">등록된 종목 없음</option>';
+    });
+    document.getElementById('physprep-admin-rank-year').innerHTML = buildYearOptions();
+    document.getElementById('physprep-admin-ranking-result').innerHTML = '';
+  }
+</script>

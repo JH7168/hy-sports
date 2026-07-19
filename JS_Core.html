@@ -62,7 +62,24 @@
   // =========================================================================
   // 초기화 및 이벤트 리스너
   // =========================================================================
+  // GAS 웹앱이 iframe 안에서 렌더링될 때, 클릭이 iframe에만 포커스를 주고
+  // 실제 입력창(input/select/textarea)까지 전달되지 않아 첫 클릭에는
+  // 타이핑이 안 되는 경우가 있다. 클릭한 요소가 실제로 포커스를 받지
+  // 못했다면 즉시 강제로 포커스를 넘겨 매번 다시 클릭해야 하는 문제를 막는다.
+  document.addEventListener('click', function(e) {
+    const t = e.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT') && document.activeElement !== t) {
+      t.focus();
+    }
+  });
+
   window.onload = function() {
+    // GAS 웹앱은 iframe 안에서 렌더링되어, 첫 클릭이 iframe에만 포커스를 주고
+    // 실제 입력창까지 전달되지 않는 경우가 있다(그래서 다른 칸을 눌렀다가
+    // 돌아와야 입력되는 것처럼 보임). 로드 시점에 미리 포커스를 넘겨준다.
+    window.focus();
+    document.getElementById('login-id')?.focus();
+
     const classSelect = document.getElementById('reg-class');
     const numSelect = document.getElementById('reg-num');
     if (classSelect) { for(let i=1; i<=8; i++) classSelect.innerHTML += `<option value="${i}">${i}반</option>`; }
@@ -113,6 +130,7 @@
     mainTabs.forEach(t => { const tab = document.getElementById(t); if(tab) tab.classList.remove('active'); });
     const targetContent = document.getElementById('content-' + tabName); if(targetContent) targetContent.classList.remove('hidden');
     if (parentId) { const p = document.getElementById(parentId); if (p) p.classList.add('active'); } else { const t = document.getElementById('tab-' + tabName); if(t) t.classList.add('active'); }
+    if (tabName === 'afterschool-small') loadPhysPrepStudentView();
     window.scrollTo(0, 0);
   }
 
@@ -120,16 +138,18 @@
   function closePETeacherView() { document.getElementById('pe-main-view')?.classList.add('hidden'); document.getElementById('main-view')?.classList.remove('hidden'); switchTab('home'); }
 
   function switchPETab(peTabName) {
-    const peTabs = ['pe-home', 'pe-inventory-status', 'pe-purchase-list', 'pe-paps-manage', 'pe-sports-manage', 'pe-lunch-manage', 'pe-board-manage'];
+    const peTabs = ['pe-home', 'pe-inventory-status', 'pe-purchase-list', 'pe-physprep-roster', 'pe-physprep-events', 'pe-physprep-input', 'pe-physprep-ranking', 'pe-paps-manage', 'pe-sports-manage', 'pe-lunch-manage', 'pe-board-manage'];
     peTabs.forEach(t => { const c = document.getElementById('content-' + t); if(c) c.classList.add('hidden'); });
 
-    const mainBtns = ['tab-pe-home', 'tab-pe-inventory-manage', 'tab-pe-paps-manage', 'tab-pe-sports-manage', 'tab-pe-lunch-manage', 'tab-pe-board-manage'];
+    const mainBtns = ['tab-pe-home', 'tab-pe-inventory-manage', 'tab-pe-physprep-manage', 'tab-pe-paps-manage', 'tab-pe-sports-manage', 'tab-pe-lunch-manage', 'tab-pe-board-manage'];
     mainBtns.forEach(b => { const btn = document.getElementById(b); if(btn) btn.classList.remove('active'); });
 
     const targetC = document.getElementById('content-' + peTabName); if(targetC) targetC.classList.remove('hidden');
 
     if(peTabName === 'pe-inventory-status' || peTabName === 'pe-purchase-list') {
       document.getElementById('tab-pe-inventory-manage')?.classList.add('active');
+    } else if(peTabName.indexOf('pe-physprep-') === 0) {
+      document.getElementById('tab-pe-physprep-manage')?.classList.add('active');
     } else {
       document.getElementById('tab-' + peTabName)?.classList.add('active');
     }
@@ -137,6 +157,10 @@
     if (peTabName === 'pe-paps-manage') loadAdminGradeStats();
     if (peTabName === 'pe-inventory-status') loadInventory();
     if (peTabName === 'pe-purchase-list') loadPurchaseReqs();
+    if (peTabName === 'pe-physprep-roster') loadPhysPrepRoster();
+    if (peTabName === 'pe-physprep-events') loadPhysPrepEventsAdmin();
+    if (peTabName === 'pe-physprep-input') loadPhysPrepEntryForm();
+    if (peTabName === 'pe-physprep-ranking') loadPhysPrepRankingAdmin();
     window.scrollTo(0, 0);
   }
 
