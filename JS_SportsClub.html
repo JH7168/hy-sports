@@ -21,7 +21,22 @@
     const container = document.getElementById(`${p}-container`);
     if (!res.success) { container.innerHTML = `<div class="card" style="text-align:center; color:#666;">${escapeHtml(res.message)}</div>`; return; }
 
-    let html = `<div class="card" style="border-top:5px solid #3949ab;"><h3 style="margin-top:0; color:#283593;">✍️ 새 글 쓰기</h3><input type="text" id="${p}-post-title" class="input-field" placeholder="제목"><textarea id="${p}-post-content" class="input-field" placeholder="자유롭게 작성해보세요 (훈련 일지, 공지, 잡담 등)" style="height:90px; resize:vertical;"></textarea><button class="btn-primary" style="background:#3949ab;" onclick="sportsClubSubmitPost('${club}')">등록</button></div>`;
+    let html = `<div class="card" style="border-top:5px solid #3949ab;">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
+        <h3 style="margin:0; color:#283593;">✍️ 새 글 쓰기</h3>
+        <button type="button" class="btn-small" id="${p}-post-mode-btn" style="background:#5c6bc0; padding:7px 14px;" onclick="sportsClubToggleComposeMode('${club}')">📋 설문지 작성</button>
+      </div>
+      <input type="hidden" id="${p}-post-ispoll" value="0">
+      <input type="text" id="${p}-post-title" class="input-field" placeholder="제목">
+      <div id="${p}-post-poll-fields" class="hidden" style="display:flex; gap:8px; flex-wrap:wrap; background:#eef0fa; padding:12px; border-radius:8px; margin-bottom:10px;">
+        <div style="flex:1.4; min-width:140px;"><label style="font-size:0.75em; color:#666;">일정 날짜</label><input type="date" id="${p}-post-poll-date" class="input-field" style="margin:0;"></div>
+        <div style="flex:1; min-width:100px;"><label style="font-size:0.75em; color:#666;">시작 시간</label><input type="time" id="${p}-post-poll-start" class="input-field" style="margin:0;"></div>
+        <div style="flex:1; min-width:100px;"><label style="font-size:0.75em; color:#666;">종료 시간</label><input type="time" id="${p}-post-poll-end" class="input-field" style="margin:0;"></div>
+        <div style="flex:1.4; min-width:140px;"><label style="font-size:0.75em; color:#666;">설문 마감 날짜</label><input type="date" id="${p}-post-poll-deadline-date" class="input-field" style="margin:0;"></div>
+        <div style="flex:1; min-width:100px;"><label style="font-size:0.75em; color:#666;">마감 시간</label><input type="time" id="${p}-post-poll-deadline-time" class="input-field" style="margin:0;"></div>
+      </div>
+      <textarea id="${p}-post-content" class="input-field" placeholder="자유롭게 작성해보세요 (훈련 일지, 공지, 잡담 등)" style="height:90px; resize:vertical;"></textarea>
+      <button class="btn-primary" style="background:#3949ab;" onclick="sportsClubSubmitPost('${club}')">등록</button></div>`;
 
     html += `<div class="card" style="border-top:5px solid #3949ab;"><h3 style="margin-top:0; color:#283593;">📋 ${escapeHtml(SPORTSCLUB_KOR[club])} 게시판</h3>`;
     if (res.list.length === 0) {
@@ -31,9 +46,11 @@
         html += `<div id="${p}-post-${post.id}" style="border-bottom:1px solid #eee; padding:14px 0;">`;
         html += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:6px;"><div style="font-weight:bold; color:#283593; font-size:1.05em;">${escapeHtml(post.title)}</div><div style="font-size:0.8em; color:#999;">${escapeHtml(post.authorName)} · ${escapeHtml(post.updatedAt)}</div></div>`;
         html += `<div style="color:#444; white-space:pre-wrap; font-size:0.95em; line-height:1.5;">${escapeHtml(post.content)}</div>`;
+        if (post.poll) html += sportsClubRenderPoll(club, post);
         if (post.mine || currentUser.role === '체육교사') {
           html += `<div style="margin-top:8px; display:flex; gap:6px;"><button class="btn-small" style="background:#607d8b; padding:5px 12px; font-size:0.85em;" onclick="sportsClubStartEdit('${club}', '${escapeHtml(post.id)}', ${JSON.stringify(post.title)}, ${JSON.stringify(post.content)})">수정</button><button class="btn-small" style="background:#d32f2f; padding:5px 12px; font-size:0.85em;" onclick="sportsClubDeletePost('${club}', '${escapeHtml(post.id)}')">삭제</button></div>`;
         }
+        html += sportsClubRenderComments(club, post);
         html += `</div>`;
       });
     }
@@ -42,12 +59,82 @@
     container.innerHTML = html;
   }
 
+  function sportsClubToggleComposeMode(club) {
+    const p = SPORTSCLUB_PREFIX[club];
+    const flag = document.getElementById(`${p}-post-ispoll`);
+    const turningOn = flag.value !== '1';
+    flag.value = turningOn ? '1' : '0';
+    document.getElementById(`${p}-post-poll-fields`).classList.toggle('hidden', !turningOn);
+    const btn = document.getElementById(`${p}-post-mode-btn`);
+    btn.textContent = turningOn ? '📝 일반 글쓰기로 전환' : '📋 설문지 작성';
+    btn.style.background = turningOn ? '#999' : '#5c6bc0';
+    const contentEl = document.getElementById(`${p}-post-content`);
+    contentEl.placeholder = turningOn ? '모집 안내 내용을 적어주세요 (예: 다음 주 화요일 배구 연습 참여자 모집)' : '자유롭게 작성해보세요 (훈련 일지, 공지, 잡담 등)';
+  }
+
+  // "yyyy-MM-ddTHH:mm" 형태의 일정 문자열을 "7/25(금) 13:00" 형태로 보기 좋게 바꾼다.
+  function sportsClubScheduleLabel_(val) {
+    if (!val) return '';
+    const d = new Date(val);
+    if (isNaN(d.getTime())) return val;
+    const week = ['일', '월', '화', '수', '목', '금', '토'];
+    return `${d.getMonth() + 1}/${d.getDate()}(${week[d.getDay()]}) ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+  }
+
+  // "yyyy-MM-ddTHH:mm" 형태의 값에서 "HH:mm" 시간만 뽑아낸다.
+  function sportsClubTimeOnly_(val) {
+    if (!val) return '';
+    const d = new Date(val);
+    if (isNaN(d.getTime())) return val;
+    return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+  }
+
+  function sportsClubRenderPoll(club, post) {
+    const poll = post.poll;
+    let body;
+    if (poll.closed) {
+      body = `<div style="color:#999; font-weight:bold;">마감되었습니다</div>`;
+    } else {
+      body = `<div style="display:flex; gap:8px;">
+        <button class="btn-small" style="flex:1; background:${poll.myResponse === '참여' ? '#2e7d32' : '#c8e6c9'}; color:${poll.myResponse === '참여' ? 'white' : '#2e7d32'};" onclick="sportsClubRespondPoll('${club}', '${escapeHtml(post.id)}', '참여')">✅ 참여</button>
+        <button class="btn-small" style="flex:1; background:${poll.myResponse === '불참' ? '#d32f2f' : '#ffcdd2'}; color:${poll.myResponse === '불참' ? 'white' : '#d32f2f'};" onclick="sportsClubRespondPoll('${club}', '${escapeHtml(post.id)}', '불참')">❌ 불참</button>
+      </div>`;
+    }
+    const joiners = poll.responses.filter(r => r.response === '참여').map(r => escapeHtml(r.name)).join(', ') || '아직 없음';
+    const scheduleLabel = `${sportsClubScheduleLabel_(poll.start)}~${sportsClubTimeOnly_(poll.end)}`;
+    return `<div style="margin-top:10px; background:#eef0fa; border-radius:8px; padding:12px 15px;">
+      <div style="font-weight:bold; color:#283593; margin-bottom:4px;">🗓️ ${escapeHtml(scheduleLabel)} · 마감 ${escapeHtml(sportsClubScheduleLabel_(poll.deadline))}</div>
+      <div style="font-size:0.85em; color:#555; margin-bottom:8px;">참여 ${poll.joinCount}명 · 불참 ${poll.declineCount}명 — 참여자: ${joiners}</div>
+      ${body}
+    </div>`;
+  }
+
+  function sportsClubRespondPoll(club, postId, response) {
+    gsRun('submitSportsClubPollResponse', club, postId, response, currentUser.token).then(function(res) {
+      showAlert(res.message);
+      if (res.success) loadSportsClubView(club);
+    });
+  }
+
   function sportsClubSubmitPost(club) {
     const p = SPORTSCLUB_PREFIX[club];
     const title = document.getElementById(`${p}-post-title`).value.trim();
     const content = document.getElementById(`${p}-post-content`).value.trim();
+    const isPoll = document.getElementById(`${p}-post-ispoll`).value === '1';
+    let scheduleStart = '', scheduleEnd = '', deadline = '';
+    if (isPoll) {
+      const date = document.getElementById(`${p}-post-poll-date`).value;
+      const start = document.getElementById(`${p}-post-poll-start`).value;
+      const end = document.getElementById(`${p}-post-poll-end`).value;
+      const deadlineDate = document.getElementById(`${p}-post-poll-deadline-date`).value;
+      const deadlineTime = document.getElementById(`${p}-post-poll-deadline-time`).value;
+      if (!date || !start || !end || !deadlineDate || !deadlineTime) { showAlert('모집 설문은 일정(날짜·시작·종료 시간)과 설문 마감(날짜·시간)을 모두 입력하세요.'); return; }
+      scheduleStart = `${date}T${start}`;
+      scheduleEnd = `${date}T${end}`;
+      deadline = `${deadlineDate}T${deadlineTime}`;
+    }
     if (!title || !content) { showAlert('제목과 내용을 모두 입력하세요.'); return; }
-    gsRun('createSportsClubPost', club, title, content, currentUser.token).then(function(res) {
+    gsRun('createSportsClubPost', club, title, content, isPoll, scheduleStart, scheduleEnd, deadline, currentUser.token).then(function(res) {
       showAlert(res.message);
       if (res.success) loadSportsClubView(club);
     });
@@ -81,6 +168,50 @@
   }
 
   // -------------------------------------------------------------------------
+  // 댓글 (부원 전용) - 스포츠클럽 게시글마다 댓글창을 붙여준다.
+  // -------------------------------------------------------------------------
+  function sportsClubRenderComments(club, post) {
+    const p = SPORTSCLUB_PREFIX[club];
+    let html = `<div style="margin-top:10px; padding:10px; background:#f7f8fc; border-radius:8px;">`;
+    html += `<div id="${p}-comments-${post.id}">`;
+    if (post.comments.length === 0) {
+      html += `<div style="color:#aaa; font-size:0.85em;">아직 댓글이 없습니다.</div>`;
+    } else {
+      post.comments.forEach(c => {
+        html += `<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px; padding:6px 0; border-bottom:1px solid #eee; font-size:0.88em;">`;
+        html += `<div><span style="font-weight:bold; color:#3949ab;">${escapeHtml(c.authorName)}</span> <span style="color:#999; font-size:0.85em;">${escapeHtml(c.createdAt)}</span><div style="color:#444; margin-top:2px; white-space:pre-wrap;">${escapeHtml(c.content)}</div></div>`;
+        if (c.mine || currentUser.role === '체육교사') {
+          html += `<button onclick="sportsClubDeleteComment('${club}', '${escapeHtml(c.id)}')" style="border:none; background:none; color:#d32f2f; cursor:pointer; font-size:0.8em; white-space:nowrap;">삭제</button>`;
+        }
+        html += `</div>`;
+      });
+    }
+    html += `</div>`;
+    html += `<div style="display:flex; gap:6px; margin-top:8px;"><input type="text" id="${p}-comment-input-${post.id}" class="input-field" placeholder="댓글을 입력하세요" style="margin:0; flex:1; padding:8px 10px; font-size:0.9em;" onkeydown="if(event.key==='Enter'){sportsClubSubmitComment('${club}', '${escapeHtml(post.id)}');}"><button class="btn-small" style="background:#3949ab; padding:8px 14px; font-size:0.85em;" onclick="sportsClubSubmitComment('${club}', '${escapeHtml(post.id)}')">등록</button></div>`;
+    html += `</div>`;
+    return html;
+  }
+
+  function sportsClubSubmitComment(club, postId) {
+    const p = SPORTSCLUB_PREFIX[club];
+    const input = document.getElementById(`${p}-comment-input-${postId}`);
+    const content = input.value.trim();
+    if (!content) return;
+    gsRun('createSportsClubComment', club, postId, content, currentUser.token).then(function(res) {
+      if (res.success) loadSportsClubView(club); else showAlert(res.message);
+    });
+  }
+
+  function sportsClubDeleteComment(club, commentId) {
+    showConfirm('이 댓글을 삭제하시겠습니까?', function() {
+      gsRun('deleteSportsClubComment', club, commentId, currentUser.token).then(function(res) {
+        showAlert(res.message);
+        if (res.success) loadSportsClubView(club);
+      });
+    });
+  }
+
+  // -------------------------------------------------------------------------
   // 관리자 - 부원 명단 관리 (부서 선택 후 관리)
   // -------------------------------------------------------------------------
   let sportsClubAdminSelected = 'SOCCER';
@@ -102,13 +233,67 @@
 
     const tbody = document.getElementById('sportsclub-mgr-tbody');
     tbody.innerHTML = `<tr><td colspan="4" style="padding:20px; color:#999;">불러오는 중입니다...</td></tr>`;
+    const captainBoxLoading = document.getElementById('sportsclub-captain-box');
+    captainBoxLoading.classList.add('hidden'); captainBoxLoading.innerHTML = '';
+    const viceCaptainBoxLoading = document.getElementById('sportsclub-vicecaptain-box');
+    viceCaptainBoxLoading.classList.add('hidden'); viceCaptainBoxLoading.innerHTML = '';
     gsRun('getSportsClubMembers', club, currentUser.token).then(function(res) {
-      if (!res.success || res.list.length === 0) { tbody.innerHTML = `<tr><td colspan="4" style="padding:20px; color:#999;">등록된 부원이 없습니다.</td></tr>`; return; }
+      const captainBox = document.getElementById('sportsclub-captain-box');
+      const viceCaptainBox = document.getElementById('sportsclub-vicecaptain-box');
+      if (!res.success || res.list.length === 0) {
+        captainBox.classList.add('hidden'); captainBox.innerHTML = '';
+        viceCaptainBox.classList.add('hidden'); viceCaptainBox.innerHTML = '';
+        tbody.innerHTML = `<tr><td colspan="4" style="padding:20px; color:#999;">등록된 부원이 없습니다.</td></tr>`;
+        return;
+      }
+      const captain = res.list.find(s => s.isCaptain);
+      const viceCaptain = res.list.find(s => s.isViceCaptain);
+      const others = res.list.filter(s => !s.isCaptain && !s.isViceCaptain); // 이미 정렬되어 넘어오므로 순서 그대로 유지
+
+      if (captain) {
+        captainBox.classList.remove('hidden');
+        captainBox.innerHTML = `<div style="background:#fff8e1; border:2px solid #ffca28; border-radius:10px; padding:14px 16px; margin-bottom:15px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+          <div style="display:flex; align-items:center; gap:12px;">
+            <div style="font-size:1.8em;">⭐</div>
+            <div>
+              <div style="font-size:0.75em; color:#8d6e00; font-weight:bold; letter-spacing:0.5px;">주장</div>
+              <div style="font-size:1.15em; font-weight:bold; color:#5d4037;">${escapeHtml(captain.name)} <span style="font-size:0.7em; color:#8d6e00; font-weight:normal;">(${escapeHtml(captain.id)} · ${escapeHtml(captain.grade)}학년)</span></div>
+            </div>
+          </div>
+          <button class="btn-small" style="background:#999;" onclick="sportsClubRemoveCaptain('${escapeHtml(captain.id)}')">주장 해제</button>
+        </div>`;
+      } else {
+        captainBox.classList.add('hidden'); captainBox.innerHTML = '';
+      }
+
+      if (viceCaptain) {
+        viceCaptainBox.classList.remove('hidden');
+        viceCaptainBox.innerHTML = `<div style="background:#e3f2fd; border:2px solid #64b5f6; border-radius:10px; padding:14px 16px; margin-bottom:15px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+          <div style="display:flex; align-items:center; gap:12px;">
+            <div style="font-size:1.8em;">🎖️</div>
+            <div>
+              <div style="font-size:0.75em; color:#1565c0; font-weight:bold; letter-spacing:0.5px;">부주장</div>
+              <div style="font-size:1.15em; font-weight:bold; color:#0d47a1;">${escapeHtml(viceCaptain.name)} <span style="font-size:0.7em; color:#1565c0; font-weight:normal;">(${escapeHtml(viceCaptain.id)} · ${escapeHtml(viceCaptain.grade)}학년)</span></div>
+            </div>
+          </div>
+          <button class="btn-small" style="background:#999;" onclick="sportsClubRemoveViceCaptain('${escapeHtml(viceCaptain.id)}')">부주장 해제</button>
+        </div>`;
+      } else {
+        viceCaptainBox.classList.add('hidden'); viceCaptainBox.innerHTML = '';
+      }
+
+      if (others.length === 0) { tbody.innerHTML = `<tr><td colspan="4" style="padding:20px; color:#999;">주장·부주장 외 등록된 부원이 없습니다.</td></tr>`; return; }
       tbody.innerHTML = '';
-      res.list.forEach(s => {
-        tbody.innerHTML += `<tr style="border-bottom:1px solid #eee;"><td style="padding:8px;">${escapeHtml(s.id)}</td><td style="padding:8px; font-weight:bold;">${escapeHtml(s.name)}</td><td style="padding:8px;">${escapeHtml(s.grade)}학년</td><td style="padding:8px;"><button class="btn-small" style="background:#d32f2f;" onclick="sportsClubRemoveMember('${escapeHtml(s.id)}')">삭제</button></td></tr>`;
+      others.forEach(s => {
+        tbody.innerHTML += `<tr style="border-bottom:1px solid #eee;"><td style="padding:8px;">${escapeHtml(s.id)}</td><td style="padding:8px; font-weight:bold;">${escapeHtml(s.name)}</td><td style="padding:8px;">${escapeHtml(s.grade)}학년</td><td style="padding:8px;"><div style="display:flex; gap:6px; justify-content:center; flex-wrap:wrap;"><button class="btn-small" style="background:#ff9800;" onclick="sportsClubSetCaptain('${escapeHtml(s.id)}')">주장 임명</button><button class="btn-small" style="background:#42a5f5;" onclick="sportsClubSetViceCaptain('${escapeHtml(s.id)}')">부주장 임명</button><button class="btn-small" style="background:#d32f2f;" onclick="sportsClubRemoveMember('${escapeHtml(s.id)}')">삭제</button></div></td></tr>`;
       });
     });
+  }
+
+  // 학년/반/번호가 모두 선택되면 조회 버튼을 누르지 않아도 자동으로 이름을 조회한다.
+  function sportsClubAutoSearchStudent() {
+    const g = document.getElementById('sportsclub-add-grade').value, c = document.getElementById('sportsclub-add-class').value, n = document.getElementById('sportsclub-add-num').value;
+    if (g && c && n) sportsClubSearchStudent();
   }
 
   function sportsClubSearchStudent() {
@@ -129,6 +314,30 @@
   function sportsClubRemoveMember(studentId) {
     showConfirm('정말 부원 명단에서 삭제하시겠습니까?', function() {
       gsRun('removeSportsClubMember', sportsClubAdminSelected, studentId, currentUser.token).then(function(res) { showAlert(res.message); loadSportsClubAdmin(); });
+    });
+  }
+
+  function sportsClubSetCaptain(studentId) {
+    showConfirm('이 부원을 주장으로 임명하시겠습니까?<br>기존 주장이 있다면 자동으로 해제됩니다.', function() {
+      gsRun('setSportsClubCaptain', sportsClubAdminSelected, studentId, currentUser.token).then(function(res) { showAlert(res.message); if (res.success) loadSportsClubAdmin(); });
+    });
+  }
+
+  function sportsClubRemoveCaptain(studentId) {
+    showConfirm('주장 임명을 해제하시겠습니까?', function() {
+      gsRun('removeSportsClubCaptain', sportsClubAdminSelected, studentId, currentUser.token).then(function(res) { showAlert(res.message); if (res.success) loadSportsClubAdmin(); });
+    });
+  }
+
+  function sportsClubSetViceCaptain(studentId) {
+    showConfirm('이 부원을 부주장으로 임명하시겠습니까?<br>기존 부주장이 있다면 자동으로 해제됩니다.', function() {
+      gsRun('setSportsClubViceCaptain', sportsClubAdminSelected, studentId, currentUser.token).then(function(res) { showAlert(res.message); if (res.success) loadSportsClubAdmin(); });
+    });
+  }
+
+  function sportsClubRemoveViceCaptain(studentId) {
+    showConfirm('부주장 임명을 해제하시겠습니까?', function() {
+      gsRun('removeSportsClubViceCaptain', sportsClubAdminSelected, studentId, currentUser.token).then(function(res) { showAlert(res.message); if (res.success) loadSportsClubAdmin(); });
     });
   }
 </script>

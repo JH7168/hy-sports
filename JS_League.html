@@ -7,6 +7,7 @@
   let leagueEventsCache = [];
   let leagueSelectedEventId = null;
   let leagueAdminSelectedEventId = null;
+  let leagueMatchesCache = {}; // matchId -> {round, teamA, teamB, scheduledDate, place, result}
   let leagueCalendarData = null;
   let leagueCalendarYear = null;
   let leagueCalendarMonth = null; // 0-indexed
@@ -242,7 +243,15 @@
 
       <h4 style="color:#4527a0; margin-bottom:8px;">⚔️ 대진 관리</h4>
       <button class="btn-primary" style="background:#ff9800; margin-bottom:12px;" onclick="leagueGenerateMatches()">🎲 등록된 팀으로 랜덤 대진 편성</button>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; background:#f0f2f5; padding:12px; border-radius:8px; margin-bottom:12px;">
+        <input type="text" id="league-bulk-place" class="input-field" placeholder="예: 운동장 (모든 대진에 한번에 반영)" style="flex:2; min-width:150px; margin:0;">
+        <button class="btn-small" style="flex:1; min-width:120px; background:#00838f;" onclick="leagueBulkApplyPlace('${eventId}')">📍 전체 장소 일괄 적용</button>
+      </div>
       <div id="league-match-list" style="margin-bottom:20px;"></div>
+
+      <h4 style="color:#4527a0; margin-bottom:8px;">🏅 경기 결과 입력</h4>
+      <p style="font-size:0.8em; color:#888; margin-top:-4px; margin-bottom:10px;">경기가 끝난 뒤 결과만 따로 입력할 수 있는 공간입니다. 날짜·장소와 별도로 저장됩니다.</p>
+      <div id="league-result-list" style="margin-bottom:20px;"></div>
 
       <h4 style="color:#4527a0; margin-bottom:8px;">📌 날짜별 일정메모</h4>
       <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
@@ -321,15 +330,54 @@
 
   function leagueLoadMatchesAdmin(eventId) {
     const el = document.getElementById('league-match-list');
+    const resultEl = document.getElementById('league-result-list');
     el.innerHTML = `<div style="text-align:center; color:#999; padding:10px;">불러오는 중입니다...</div>`;
+    resultEl.innerHTML = `<div style="text-align:center; color:#999; padding:10px;">불러오는 중입니다...</div>`;
+    // 날짜가 아직 입력되지 않은 대진은, 달력 버튼을 눌렀을 때 오늘 날짜가 아니라 이
+    // 종목의 대회 시작일 근처가 먼저 보이도록 시작일을 기본값으로 채워둔다.
+    const ev = leagueEventsCache.find(e => e.id === eventId);
+    const defaultDate = ev ? ev.startDate : '';
     gsRun('getLeagueMatches', eventId, currentUser.token).then(function(res) {
-      if (!res.success || res.list.length === 0) { el.innerHTML = `<div style="color:#999; text-align:center; padding:10px;">편성된 대진이 없습니다.</div>`; return; }
-      let html = `<div style="overflow-x:auto;"><table style="width:100%; border-collapse:collapse; text-align:center; font-size:0.88em;"><thead><tr style="background:#ede7f6;"><th style="padding:6px;">회차</th><th style="padding:6px;">대진</th><th style="padding:6px;">날짜</th><th style="padding:6px;">장소</th><th style="padding:6px;">결과</th><th style="padding:6px;">관리</th></tr></thead><tbody>`;
+      leagueMatchesCache = {};
+      if (!res.success || res.list.length === 0) {
+        el.innerHTML = `<div style="color:#999; text-align:center; padding:10px;">편성된 대진이 없습니다.</div>`;
+        resultEl.innerHTML = `<div style="color:#999; text-align:center; padding:10px;">편성된 대진이 없습니다.</div>`;
+        return;
+      }
+      res.list.forEach(mt => { leagueMatchesCache[mt.id] = mt; });
+
+      // 날짜·장소만 다루는 대진 편성 표 (결과는 별도 영역에서 입력)
+      let html = `<div style="overflow-x:auto;"><table style="width:100%; border-collapse:collapse; text-align:center; font-size:0.88em;"><thead><tr style="background:#ede7f6;"><th style="padding:6px;">회차</th><th style="padding:6px;">대진</th><th style="padding:6px;">날짜</th><th style="padding:6px;">장소</th><th style="padding:6px;">관리</th></tr></thead><tbody>`;
       res.list.forEach(mt => {
-        html += `<tr style="border-bottom:1px solid #eee;"><td style="padding:6px;">${escapeHtml(mt.round)}</td><td style="padding:6px; font-weight:bold;">${escapeHtml(mt.teamA)} ${mt.teamB ? 'vs ' + escapeHtml(mt.teamB) : '(부전승)'}</td><td style="padding:4px;"><input type="date" class="input-field" style="margin:0; padding:6px; font-size:0.85em;" id="league-match-date-${mt.id}" value="${escapeHtml(mt.scheduledDate)}"></td><td style="padding:4px;"><input type="text" class="input-field" style="margin:0; padding:6px; font-size:0.85em;" id="league-match-place-${mt.id}" value="${escapeHtml(mt.place)}" placeholder="장소"></td><td style="padding:4px;"><input type="text" class="input-field" style="margin:0; padding:6px; font-size:0.85em;" id="league-match-result-${mt.id}" value="${escapeHtml(mt.result)}" placeholder="예: 3:1 승"></td><td style="padding:6px; white-space:nowrap;"><button class="btn-small" style="background:#5e35b1; padding:6px 10px; font-size:0.8em;" onclick="leagueSaveMatch('${eventId}', '${escapeHtml(mt.id)}')">저장</button> <button class="btn-small" style="background:#d32f2f; padding:6px 10px; font-size:0.8em;" onclick="leagueRemoveMatch('${eventId}', '${escapeHtml(mt.id)}')">삭제</button></td></tr>`;
+        const dateValue = mt.scheduledDate || defaultDate || '';
+        html += `<tr style="border-bottom:1px solid #eee;"><td style="padding:6px;">${escapeHtml(mt.round)}</td><td style="padding:6px; font-weight:bold;">${escapeHtml(mt.teamA)} ${mt.teamB ? 'vs ' + escapeHtml(mt.teamB) : '(부전승)'}</td><td style="padding:4px;"><input type="date" class="input-field" style="margin:0; padding:6px; font-size:0.85em;" id="league-match-date-${mt.id}" value="${escapeHtml(dateValue)}"></td><td style="padding:4px;"><input type="text" class="input-field" style="margin:0; padding:6px; font-size:0.85em;" id="league-match-place-${mt.id}" value="${escapeHtml(mt.place)}" placeholder="장소"></td><td style="padding:6px; white-space:nowrap;"><button class="btn-small" style="background:#5e35b1; padding:6px 10px; font-size:0.8em;" onclick="leagueSaveMatch('${eventId}', '${escapeHtml(mt.id)}')">저장</button> <button class="btn-small" style="background:#d32f2f; padding:6px 10px; font-size:0.8em;" onclick="leagueRemoveMatch('${eventId}', '${escapeHtml(mt.id)}')">삭제</button></td></tr>`;
       });
       html += `</tbody></table></div>`;
       el.innerHTML = html;
+
+      // 결과만 따로 입력하는 표
+      let resultHtml = `<div style="overflow-x:auto;"><table style="width:100%; border-collapse:collapse; text-align:center; font-size:0.88em;"><thead><tr style="background:#ede7f6;"><th style="padding:6px;">회차</th><th style="padding:6px;">대진</th><th style="padding:6px;">결과</th><th style="padding:6px;">관리</th></tr></thead><tbody>`;
+      res.list.forEach(mt => {
+        resultHtml += `<tr style="border-bottom:1px solid #eee;"><td style="padding:6px;">${escapeHtml(mt.round)}</td><td style="padding:6px; font-weight:bold;">${escapeHtml(mt.teamA)} ${mt.teamB ? 'vs ' + escapeHtml(mt.teamB) : '(부전승)'}</td><td style="padding:4px;"><input type="text" class="input-field" style="margin:0; padding:6px; font-size:0.85em;" id="league-match-result-${mt.id}" value="${escapeHtml(mt.result)}" placeholder="예: 3:1 승"></td><td style="padding:6px;"><button class="btn-small" style="background:#5e35b1; padding:6px 10px; font-size:0.8em;" onclick="leagueSaveMatchResult('${eventId}', '${escapeHtml(mt.id)}')">저장</button></td></tr>`;
+      });
+      resultHtml += `</tbody></table></div>`;
+      resultEl.innerHTML = resultHtml;
+    });
+  }
+
+  // 대진 목록의 장소를 한 번에 같은 값으로 채워 저장한다 (경기 장소가 대부분 동일한 경우가 많아서).
+  function leagueBulkApplyPlace(eventId) {
+    const place = document.getElementById('league-bulk-place').value.trim();
+    if (!place) { showAlert('일괄 적용할 장소를 입력하세요.'); return; }
+    const ids = Object.keys(leagueMatchesCache);
+    if (ids.length === 0) { showAlert('편성된 대진이 없습니다.'); return; }
+    showConfirm(`편성된 대진 ${ids.length}건의 장소를 모두 "${escapeHtml(place)}"(으)로 적용하시겠습니까?`, function() {
+      Promise.all(ids.map(id => {
+        const mt = leagueMatchesCache[id];
+        const dateInput = document.getElementById(`league-match-date-${id}`);
+        const dateVal = dateInput ? dateInput.value : mt.scheduledDate;
+        return gsRun('updateLeagueMatch', eventId, id, dateVal, place, mt.result, currentUser.token);
+      })).then(function() { showAlert('모든 대진에 장소를 적용했습니다.'); leagueLoadMatchesAdmin(eventId); });
     });
   }
 
@@ -340,11 +388,25 @@
     });
   }
 
+  // 날짜·장소 표에서 저장 - 결과 입력란은 이 표에 없으므로 캐시에 있던 기존 결과값을 그대로 유지해서 보낸다.
   function leagueSaveMatch(eventId, matchId) {
     const scheduledDate = document.getElementById(`league-match-date-${matchId}`).value;
     const place = document.getElementById(`league-match-place-${matchId}`).value.trim();
+    const result = (leagueMatchesCache[matchId] && leagueMatchesCache[matchId].result) || '';
+    gsRun('updateLeagueMatch', eventId, matchId, scheduledDate, place, result, currentUser.token).then(function(res) {
+      showAlert(res.message);
+      if (res.success && leagueMatchesCache[matchId]) { leagueMatchesCache[matchId].scheduledDate = scheduledDate; leagueMatchesCache[matchId].place = place; }
+    });
+  }
+
+  // 결과 입력 표에서 저장 - 날짜·장소는 캐시에 있던 값을 그대로 유지해서 보낸다.
+  function leagueSaveMatchResult(eventId, matchId) {
+    const mt = leagueMatchesCache[matchId]; if (!mt) return;
     const result = document.getElementById(`league-match-result-${matchId}`).value.trim();
-    gsRun('updateLeagueMatch', eventId, matchId, scheduledDate, place, result, currentUser.token).then(function(res) { showAlert(res.message); });
+    gsRun('updateLeagueMatch', eventId, matchId, mt.scheduledDate, mt.place, result, currentUser.token).then(function(res) {
+      showAlert(res.message);
+      if (res.success) mt.result = result;
+    });
   }
 
   function leagueRemoveMatch(eventId, matchId) {

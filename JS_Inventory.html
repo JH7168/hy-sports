@@ -103,29 +103,65 @@
         tbody.innerHTML += `<tr style="border-bottom:1px solid #eee;"><td style="padding:8px; color:#888;">${escapeHtml(item[0])}</td><td style="padding:8px; font-weight:bold;">${escapeHtml(item[1])}</td><td style="padding:8px; color:#555;">${escapeHtml(item[2])}</td><td style="padding:8px;">${escapeHtml(item[3])}</td><td style="padding:8px;">${parseInt(item[4]).toLocaleString()}</td><td style="padding:8px; font-weight:bold; color:#d32f2f;">${parseInt(item[5]).toLocaleString()}원</td><td style="padding:8px; font-weight:bold; color:#1e3c72;">${escapeHtml(item[6])}</td></tr>`;
       });
     });
+    loadBudgetList();
   }
 
-  // 7. 물품구입명단 엑셀 다운로드 (SheetJS 활용)
-  function downloadPurchaseExcel() {
-    const table = document.getElementById("purchase-table");
-    if(!table) return;
+  // -------------------------------------------------------------------------
+  // 7. 예산 관리 - 조회는 체육교사 전체, 등록/삭제는 박정환 선생님 전용
+  // -------------------------------------------------------------------------
+  function loadBudgetList() {
+    const container = document.getElementById('budget-summary-list');
+    container.innerHTML = '<div style="color:#999; text-align:center; padding:10px;">불러오는 중입니다...</div>';
+    gsRun('getBudgetList', currentUser.token).then(function(res) {
+      const regBtn = document.getElementById('btn-budget-register');
+      if (res.isManager) regBtn.classList.remove('hidden'); else regBtn.classList.add('hidden');
 
-    const wb = XLSX.utils.table_to_book(table, {sheet: "물품구입명단"});
+      if (!res.success) { container.innerHTML = `<div style="color:red; text-align:center; padding:10px;">${escapeHtml(res.message)}</div>`; return; }
+      if (res.list.length === 0) { container.innerHTML = '<div style="color:#999; text-align:center; padding:10px;">등록된 예산이 없습니다.</div>'; return; }
 
-    const ws = wb.Sheets["물품구입명단"];
-    if(ws) {
-      ws['!cols'] = [
-        {wch: 8},  // 순번
-        {wch: 25}, // 내용
-        {wch: 15}, // 규격
-        {wch: 8},  // 수량
-        {wch: 15}, // 예상단가
-        {wch: 15}, // 예상금액
-        {wch: 12}  // 신청교사
-      ];
-    }
+      let html = `<table style="width:100%; border-collapse:collapse; text-align:center; font-size:0.9em;"><thead><tr style="background:#c8e6c9; border-bottom:2px solid #a5d6a7;"><th style="padding:8px;">예산 종류</th><th style="padding:8px;">편성금액</th><th style="padding:8px;">사용금액</th><th style="padding:8px;">잔액</th>${res.isManager ? '<th style="padding:8px;">관리</th>' : ''}</tr></thead><tbody>`;
+      res.list.forEach(b => {
+        html += `<tr style="border-bottom:1px solid #e0e0e0;"><td style="padding:8px; font-weight:bold;">${escapeHtml(b.type)}</td><td style="padding:8px;">${parseInt(b.allocated).toLocaleString()}원</td><td style="padding:8px;">${parseInt(b.used).toLocaleString()}원</td><td style="padding:8px; font-weight:bold; color:#1b5e20;">${parseInt(b.balance).toLocaleString()}원</td>${res.isManager ? `<td style="padding:8px;"><button class="btn-small" style="background:#999; padding:5px 10px; font-size:0.85em;" onclick="removeBudgetItemNow('${escapeHtml(b.id)}')">삭제</button></td>` : ''}</tr>`;
+      });
+      html += '</tbody></table>';
+      container.innerHTML = html;
+    });
+  }
 
-    const dateStr = new Date().toLocaleDateString().replace(/\./g, '').replace(/ /g, '_');
-    XLSX.writeFile(wb, `한영고_체육부_물품구입신청명단_${dateStr}.xlsx`);
+  function calcBudgetBalance() {
+    const allocated = parseInt(document.getElementById('budget-allocated-input').value) || 0;
+    const used = parseInt(document.getElementById('budget-used-input').value) || 0;
+    document.getElementById('budget-balance-input').value = (allocated - used).toLocaleString() + "원";
+  }
+
+  function openBudgetModal() {
+    document.getElementById('budget-type-input').value = '';
+    document.getElementById('budget-allocated-input').value = '';
+    document.getElementById('budget-used-input').value = '';
+    document.getElementById('budget-balance-input').value = '';
+    document.getElementById('budgetModal').classList.remove('hidden');
+  }
+
+  function closeBudgetModal() {
+    document.getElementById('budgetModal').classList.add('hidden');
+  }
+
+  function submitBudgetItem() {
+    const type = document.getElementById('budget-type-input').value.trim();
+    const allocated = document.getElementById('budget-allocated-input').value;
+    const used = document.getElementById('budget-used-input').value;
+    if (!type || allocated === '') { showAlert('예산 종류와 편성금액을 입력하세요.'); return; }
+    const btn = document.getElementById('btn-budget-submit'); btn.disabled = true; btn.innerText = '등록 중...';
+    gsRun('saveBudgetItem', type, allocated, used || 0, currentUser.token).then(function(res) {
+      btn.disabled = false; btn.innerText = '등록';
+      showAlert(res.message);
+      if (res.success) { closeBudgetModal(); loadBudgetList(); }
+    }).catch(function() { btn.disabled = false; btn.innerText = '등록'; });
+  }
+
+  function removeBudgetItemNow(budgetId) {
+    showConfirm('이 예산 항목을 삭제하시겠습니까?', function() {
+      gsRun('removeBudgetItem', budgetId, currentUser.token).then(function(res) { showAlert(res.message); if (res.success) loadBudgetList(); });
+    });
   }
 </script>

@@ -13,17 +13,22 @@
 
     <div class="nav-menu">
       <button id="tab-home" class="nav-btn active" onclick="switchTab('home')">홈</button>
-      <button id="tab-paps" class="nav-btn" onclick="switchTab('paps')">PAPS</button>
-      <button id="tab-sports" class="nav-btn" onclick="switchTab('sports')">체육한마당</button>
-      <button id="tab-friendly" class="nav-btn" onclick="switchTab('friendly')">친사리그</button>
 
       <div class="dropdown">
-        <button id="tab-sportsclub" class="nav-btn">스포츠클럽 ▾</button>
+        <button id="tab-class" class="nav-btn">수업 ▾</button>
         <div class="dropdown-content">
-          <button onclick="switchTab('sportsclub-soccer', 'tab-sportsclub')">축구</button>
-          <button onclick="switchTab('sportsclub-basketball', 'tab-sportsclub')">농구</button>
-          <button onclick="switchTab('sportsclub-volleyball', 'tab-sportsclub')">배구</button>
-          <button onclick="switchTab('sportsclub-badminton', 'tab-sportsclub')">배드민턴</button>
+          <button onclick="switchTab('class-physexam', 'tab-class')">수행평가</button>
+          <button onclick="switchTab('paps', 'tab-class')">PAPS</button>
+        </div>
+      </div>
+
+      <div class="dropdown">
+        <button id="tab-lunch" class="nav-btn">점심시간 ▾</button>
+        <div class="dropdown-content">
+          <button onclick="switchTab('lunch-gym', 'tab-lunch')">체육관</button>
+          <button onclick="switchTab('lunch-field', 'tab-lunch')">운동장</button>
+          <button onclick="switchTab('lunch-futsal', 'tab-lunch')">풋살장</button>
+          <button id="tab-lunch-manage" class="hidden" onclick="switchTab('lunch-manage', 'tab-lunch')">관리</button>
         </div>
       </div>
 
@@ -36,15 +41,22 @@
       </div>
 
       <div class="dropdown">
-        <button id="tab-lunch" class="nav-btn">점심시간 ▾</button>
+        <button id="tab-leagues" class="nav-btn">스포츠리그 ▾</button>
         <div class="dropdown-content">
-          <button onclick="switchTab('lunch-gym', 'tab-lunch')">체육관</button>
-          <button onclick="switchTab('lunch-field', 'tab-lunch')">운동장</button>
-          <button onclick="switchTab('lunch-futsal', 'tab-lunch')">풋살장</button>
+          <div class="subdropdown">
+            <button class="subdropdown-toggle" onclick="toggleSubdropdown(event, this)">스포츠클럽 ▾</button>
+            <div class="subdropdown-content">
+              <button onclick="switchTab('sportsclub-soccer', 'tab-leagues')">축구부</button>
+              <button onclick="switchTab('sportsclub-basketball', 'tab-leagues')">농구부</button>
+              <button onclick="switchTab('sportsclub-volleyball', 'tab-leagues')">배구부</button>
+              <button onclick="switchTab('sportsclub-badminton', 'tab-leagues')">배드민턴부</button>
+            </div>
+          </div>
+          <button id="tab-friendly" onclick="switchTab('friendly', 'tab-leagues')">친사리그</button>
         </div>
       </div>
 
-      <button id="tab-suggestion" class="nav-btn" onclick="switchTab('suggestion')">건의함</button>
+      <button id="tab-sports" class="nav-btn" onclick="switchTab('sports')">체육한마당</button>
       <button id="tab-pe-teacher" class="nav-btn hidden" onclick="openPETeacherView()">체육교사</button>
     </div>
   </div>
@@ -54,19 +66,22 @@
 
     <!-- [화면] 홈 -->
     <div id="content-home">
-      <div style="background: white; border-radius: 12px; padding: 20px; margin-bottom: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border-left: 5px solid #e91e63;">
-        <h3 style="margin-top:0; margin-bottom:15px; color:#1e3c72; display:flex; align-items:center; gap:8px;">📢 체육부 주요 공지</h3>
-        <div id="home-notice-list" style="max-height: 280px; overflow-y: auto; padding-right:10px;">공지사항을 불러오는 중입니다...</div>
-      </div>
-      <div style="position: relative; border-radius: 12px; overflow: hidden; margin-bottom: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.15); min-height: 240px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; color: white;">
+      <div style="position: relative; border-radius: 12px; overflow: hidden; margin-bottom: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.15); min-height: 240px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; color: white;">
         <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(rgba(20, 40, 80, 0.65), rgba(30, 60, 114, 0.75)), url('https://images.unsplash.com/photo-1544698310-74ea9d1c8258?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80') center/cover; z-index: 1;"></div>
         <div style="position: relative; z-index: 2; padding: 25px 20px; width: 100%;">
           <h2 style="margin-top:0; font-size:1.85em; letter-spacing:-0.5px; text-shadow: 2px 2px 5px rgba(0,0,0,0.6); font-weight: bold;">💪 한영고등학교 체육인성부</h2>
           <p style="font-size:1.05em; opacity:0.95; margin-bottom:0; word-break:keep-all; text-shadow: 1px 1px 4px rgba(0,0,0,0.6); line-height: 1.5;">땀 흘리며 소통하고, 팀워크로 하나 되는 공간입니다.<br>활기찬 학교생활을 위해 함께 달립시다!</p>
         </div>
       </div>
+      <div style="display:flex; justify-content:flex-end; margin-bottom:10px;">
+        <button onclick="openSuggestionModal()" style="background:#455a64; color:white; border:none; padding:8px 16px; border-radius:20px; font-size:0.85em; font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; gap:5px; box-shadow:0 2px 8px rgba(69,90,100,0.3);">✉️ 건의함</button>
+      </div>
+      <div style="background: white; border-radius: 12px; padding: 20px; margin-bottom: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border-left: 5px solid #e91e63;">
+        <h3 style="margin-top:0; margin-bottom:15px; color:#1e3c72; display:flex; align-items:center; gap:8px;">📢 체육부 주요 공지</h3>
+        <div id="home-notice-list" style="max-height: 280px; overflow-y: auto; padding-right:10px;">공지사항을 불러오는 중입니다...</div>
+      </div>
       <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-bottom: 20px;">
-        <div class="card" style="text-align:center; cursor:pointer; transition:0.2s; word-break:keep-all;" onclick="switchTab('paps')" onmouseover="this.style.transform='translateY(-5px)'" onmouseout="this.style.transform='translateY(0)'">
+        <div class="card" style="text-align:center; cursor:pointer; transition:0.2s; word-break:keep-all;" onclick="switchTab('paps', 'tab-class')" onmouseover="this.style.transform='translateY(-5px)'" onmouseout="this.style.transform='translateY(0)'">
           <div style="font-size:2.5em; margin-bottom:10px;">📊</div>
           <div style="font-weight:bold; color:#1e3c72; font-size:1.1em;">나의 PAPS</div><div style="font-size:0.8em; color:#666; margin-top:5px;">건강체력평가 분석</div>
         </div>
@@ -83,6 +98,12 @@
           <div style="font-weight:bold; color:#1e3c72; font-size:1.1em;">시설 예약</div><div style="font-size:0.8em; color:#666; margin-top:5px;">점심시간 체육관</div>
         </div>
       </div>
+    </div>
+
+    <!-- [화면] 수행평가 (추후 개발 예정) -->
+    <div id="content-class-physexam" class="hidden">
+      <h3 style="color:#1e3c72; border-bottom: 2px solid #1e3c72; padding-bottom:5px;">📝 수행평가</h3>
+      <div class="card">업데이트 예정입니다.</div>
     </div>
 
     <!-- [화면] PAPS -->
@@ -164,9 +185,20 @@
       <h3 style="color:#1e3c72; border-bottom: 2px solid #1e3c72; padding-bottom:5px;">🥅 점심시간 - 풋살장 예약</h3>
       <div id="futsal-student-container"><div class="card" style="text-align:center; color:#999;">불러오는 중입니다...</div></div>
     </div>
-    <div id="content-suggestion" class="hidden">
-      <h3 style="color:#1e3c72; border-bottom: 2px solid #1e3c72; padding-bottom:5px;">✉️ 건의함</h3>
-      <div id="suggestion-student-container"><div class="card" style="text-align:center; color:#999;">불러오는 중입니다...</div></div>
+    <div id="content-lunch-manage" class="hidden">
+      <h3 style="color:#1e3c72; border-bottom: 2px solid #1e3c72; padding-bottom:5px;">🚨 시설 위반 관리</h3>
+      <div id="lunch-manage-container"><div class="card" style="text-align:center; color:#999;">불러오는 중입니다...</div></div>
     </div>
+  </div>
+</div>
+
+<!-- 건의함 모달 (탭이 아닌 홈의 작은 버튼으로 열고 닫는 팝업) -->
+<div id="suggestionModal" class="custom-modal-overlay hidden">
+  <div class="custom-modal-box wide-left">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <h3 style="margin:0; color:#263238;">✉️ 건의함</h3>
+      <button onclick="closeSuggestionModal()" style="border:none; background:none; font-size:1.4em; line-height:1; cursor:pointer; color:#999; padding:0;">✕</button>
+    </div>
+    <div id="suggestion-student-container"><div class="card" style="text-align:center; color:#999;">불러오는 중입니다...</div></div>
   </div>
 </div>

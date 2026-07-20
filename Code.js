@@ -57,6 +57,14 @@ function setupSystemSheets() {
     purchaseSheet.getRange("A1:H1").setBackground("#2196f3").setFontColor("white").setFontWeight("bold");
   }
 
+  // 예산관리 시트 세팅 (박정환 선생님만 등록/삭제 가능)
+  let budgetSheet = ss.getSheetByName('예산관리');
+  if (!budgetSheet) {
+    budgetSheet = ss.insertSheet('예산관리');
+    budgetSheet.appendRow(['예산ID', '예산종류', '편성금액', '사용금액', '잔액', '등록일시', '등록자']);
+    budgetSheet.getRange("A1:G1").setBackground("#1e3c72").setFontColor("white").setFontWeight("bold");
+  }
+
   // 소규모수업 - 체대입시반 시트 세팅
   setupPhysPrepSheets();
 

@@ -13,10 +13,24 @@
 
     <div class="pe-nav-menu">
       <button id="tab-pe-home" class="pe-nav-btn active" onclick="switchPETab('pe-home')">관리자 홈</button>
-      <button id="tab-pe-paps-manage" class="pe-nav-btn" onclick="switchPETab('pe-paps-manage')">PAPS</button>
-      <button id="tab-pe-sports-manage" class="pe-nav-btn" onclick="switchPETab('pe-sports-manage')">체육한마당</button>
-      <button id="tab-pe-league-manage" class="pe-nav-btn" onclick="switchPETab('pe-league-manage')">친사리그</button>
-      <button id="tab-pe-sportsclub-manage" class="pe-nav-btn" onclick="switchPETab('pe-sportsclub-manage')">스포츠클럽</button>
+
+      <div class="dropdown">
+        <button id="tab-pe-class-menu" class="pe-nav-btn">수업 ▾</button>
+        <div class="dropdown-content">
+          <button onclick="switchPETab('pe-class-physexam', 'tab-pe-class-menu')">수행평가</button>
+          <button onclick="switchPETab('pe-paps-manage', 'tab-pe-class-menu')">PAPS</button>
+        </div>
+      </div>
+
+      <div class="dropdown">
+        <button id="tab-pe-lunch-manage" class="pe-nav-btn">점심시간 ▾</button>
+        <div class="dropdown-content">
+          <button onclick="switchPETab('pe-facility-gym', 'tab-pe-lunch-manage')">체육관</button>
+          <button onclick="switchPETab('pe-facility-field', 'tab-pe-lunch-manage')">운동장</button>
+          <button onclick="switchPETab('pe-facility-futsal', 'tab-pe-lunch-manage')">풋살장</button>
+          <button onclick="switchPETab('pe-facility-managers', 'tab-pe-lunch-manage')">관리</button>
+        </div>
+      </div>
 
       <div class="dropdown">
         <button id="tab-pe-afterschool-manage" class="pe-nav-btn">방과후 ▾</button>
@@ -27,14 +41,14 @@
       </div>
 
       <div class="dropdown">
-        <button id="tab-pe-lunch-manage" class="pe-nav-btn">점심시간 ▾</button>
+        <button id="tab-pe-leagues-menu" class="pe-nav-btn">스포츠리그 ▾</button>
         <div class="dropdown-content">
-          <button onclick="switchPETab('pe-facility-gym', 'tab-pe-lunch-manage')">체육관</button>
-          <button onclick="switchPETab('pe-facility-field', 'tab-pe-lunch-manage')">운동장</button>
-          <button onclick="switchPETab('pe-facility-futsal', 'tab-pe-lunch-manage')">풋살장</button>
-          <button onclick="switchPETab('pe-facility-violations', 'tab-pe-lunch-manage')">전체 위반기록</button>
+          <button onclick="switchPETab('pe-sportsclub-manage', 'tab-pe-leagues-menu')">스포츠클럽</button>
+          <button onclick="switchPETab('pe-league-manage', 'tab-pe-leagues-menu')">친사리그</button>
         </div>
       </div>
+
+      <button id="tab-pe-sports-manage" class="pe-nav-btn" onclick="switchPETab('pe-sports-manage')">체육한마당</button>
 
       <div class="dropdown">
         <button id="tab-pe-inventory-manage" class="pe-nav-btn">물품 관리 ▾</button>
@@ -44,8 +58,6 @@
         </div>
       </div>
 
-      <button id="tab-pe-suggestion-manage" class="pe-nav-btn hidden" onclick="switchPETab('pe-suggestion-manage')">건의함</button>
-
       <button class="pe-nav-btn" onclick="closePETeacherView()" style="margin-left: auto; background: rgba(255,255,255,0.15); padding: 15px 20px;">나가기 ↩</button>
     </div>
   </div>
@@ -53,8 +65,11 @@
   <div class="container">
     <div id="content-pe-home">
       <div class="card">
-        <h3 style="margin-top:0; color:#203a43;">👨‍🏫 체육교사 통합 관리 시스템</h3>
-        <p style="color:#333; line-height: 1.6; font-size:1.05em; margin-bottom: 0;">관리자 대시보드에 접속하였습니다. 상단 탭을 통해 학생 데이터를 제어하세요.</p>
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+          <h3 style="margin:0; color:#203a43;">👨‍🏫 체육교사 통합 관리 시스템</h3>
+          <button id="tab-pe-suggestion-manage" class="hidden" onclick="switchPETab('pe-suggestion-manage')" style="background:#455a64; color:white; border:none; padding:8px 16px; border-radius:20px; font-size:0.85em; font-weight:bold; cursor:pointer;">✉️ 건의함</button>
+        </div>
+        <p style="color:#333; line-height: 1.6; font-size:1.05em; margin-bottom: 0; margin-top:10px;">관리자 대시보드에 접속하였습니다. 상단 탭을 통해 학생 데이터를 제어하세요.</p>
       </div>
       <div class="card" style="border-top: 5px solid #607d8b;">
         <h3 style="margin-top:0; color:#455a64;">🎓 3학년 졸업일 설정</h3>
@@ -121,7 +136,12 @@
       <div class="card" style="border-top: 5px solid #2196f3;">
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; margin-bottom:15px;">
           <h3 style="margin:0; color:#0d47a1;">🛒 물품 구입 기안 신청 명단</h3>
-          <button class="btn-primary" onclick="downloadPurchaseExcel()" style="margin:0; width:auto; padding:10px 15px; background:#1e3c72; border-radius:6px; font-size:0.95em;">📊 엑셀 다운로드</button>
+          <button class="btn-primary hidden" id="btn-budget-register" onclick="openBudgetModal()" style="margin:0; width:auto; padding:10px 15px; background:#1e3c72; border-radius:6px; font-size:0.95em;">💰 예산 등록</button>
+        </div>
+
+        <div style="background:#e8f5e9; padding:15px; border-radius:8px; margin-bottom:15px;">
+          <div style="font-weight:bold; color:#1b5e20; margin-bottom:10px;">💰 현재 예산 현황</div>
+          <div id="budget-summary-list" style="overflow-x:auto;"><div style="color:#999; text-align:center; padding:10px;">불러오는 중입니다...</div></div>
         </div>
 
         <div style="background:#e3f2fd; padding:15px; border-radius:8px; margin-bottom:20px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
@@ -167,39 +187,42 @@
         <h3 style="margin-top:0; color:#4a148c;">🎯 체대입시반 명단 관리</h3>
         <p style="font-size:0.9em; color:#666; margin-bottom:15px;">여기에 등록된 학생만 학생 화면의 '방과후 &gt; 소규모수업' 탭을 이용할 수 있습니다. 명단에서 삭제해도 과거 측정 기록은 그대로 보관됩니다.</p>
         <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; background:#f0f2f5; padding:15px; border-radius:8px; margin-bottom:15px;">
-          <select id="physprep-add-grade" class="input-field" style="flex:1; min-width:70px; margin:0;"><option value="">학년</option><option value="1">1학년</option><option value="2">2학년</option><option value="3">3학년</option></select>
-          <select id="physprep-add-class" class="input-field" style="flex:1; min-width:70px; margin:0;"><option value="">반</option></select>
-          <select id="physprep-add-num" class="input-field" style="flex:1; min-width:70px; margin:0;"><option value="">번호</option></select>
+          <select id="physprep-add-grade" class="input-field" style="flex:1; min-width:70px; margin:0;" onchange="physPrepAutoSearchStudent()"><option value="">학년</option><option value="1">1학년</option><option value="2">2학년</option><option value="3">3학년</option></select>
+          <select id="physprep-add-class" class="input-field" style="flex:1; min-width:70px; margin:0;" onchange="physPrepAutoSearchStudent()"><option value="">반</option></select>
+          <select id="physprep-add-num" class="input-field" style="flex:1; min-width:70px; margin:0;" onchange="physPrepAutoSearchStudent()"><option value="">번호</option></select>
           <input type="text" id="physprep-add-name" class="input-field" placeholder="조회 결과" readonly style="flex:1.5; min-width:100px; margin:0; background:#e8f0fe; text-align:center;">
-          <button class="btn-small" onclick="physPrepSearchStudent()" style="margin:0;">조회</button>
           <button class="btn-primary" id="btn-physprep-add" onclick="physPrepAddStudent()" disabled style="margin:0; flex:1; min-width:90px; background:#6a1b9a;">명단추가</button>
         </div>
-        <div style="overflow-x:auto;">
+        <button class="btn-small" id="btn-physprep-list-toggle" onclick="physPrepToggleRosterList()" style="background:#999; margin-bottom:10px;">명단 보기 ▾</button>
+        <div id="physprep-roster-list-wrap" class="hidden" style="overflow-x:auto;">
           <table style="width:100%; border-collapse:collapse; text-align:center; font-size:0.95em;">
-            <thead><tr style="background:#f3e5f5; border-bottom:2px solid #ccc;"><th style="padding:10px;">학번</th><th style="padding:10px;">이름</th><th style="padding:10px;">학년</th><th style="padding:10px;">등록일</th><th style="padding:10px;">관리</th></tr></thead>
-            <tbody id="physprep-roster-tbody"><tr><td colspan="5" style="padding:20px; color:#999;">불러오는 중입니다...</td></tr></tbody>
+            <thead><tr style="background:#f3e5f5; border-bottom:2px solid #ccc;"><th style="padding:10px;">학번</th><th style="padding:10px;">이름</th><th style="padding:10px;">학년</th><th style="padding:10px;">관리</th></tr></thead>
+            <tbody id="physprep-roster-tbody"><tr><td colspan="4" style="padding:20px; color:#999;">불러오는 중입니다...</td></tr></tbody>
           </table>
         </div>
       </div>
 
       <div class="card" style="border-top: 5px solid #6a1b9a; margin-bottom: 20px;">
         <h3 style="margin-top:0; color:#4a148c;">🏷️ 측정 종목 관리</h3>
-        <p style="font-size:0.9em; color:#666; margin-bottom:15px;">종목은 나중에 얼마든지 추가할 수 있습니다. 기록 방향(클수록/작을수록 좋음)을 정확히 선택해야 랭킹이 올바르게 정렬됩니다.</p>
+        <p style="font-size:0.9em; color:#666; margin-bottom:15px;">종목은 나중에 얼마든지 추가할 수 있습니다. 방향(<span style="color:#1565c0;">▲파란색=클수록 좋음</span> / <span style="color:#d32f2f;">▼빨간색=작을수록 좋음</span>)을 정확히 선택해야 랭킹이 올바르게 정렬됩니다. 만점은 전체 종목 합이 1000점이 되도록 배분하고, 배점표(기록구간→점수)를 만들어야 총점 계산에 반영됩니다.</p>
         <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; background:#f0f2f5; padding:15px; border-radius:8px; margin-bottom:15px;">
           <input type="text" id="physprep-event-name" class="input-field" placeholder="종목명 (예: 팔굽혀펴기)" style="flex:2; min-width:140px; margin:0;">
           <input type="text" id="physprep-event-unit" class="input-field" placeholder="단위 (예: 회, cm, 초)" style="flex:1; min-width:80px; margin:0;">
-          <select id="physprep-event-direction" class="input-field" style="flex:1; min-width:150px; margin:0;">
-            <option value="HIGH">기록이 클수록 좋음</option>
-            <option value="LOW">기록이 작을수록 좋음</option>
-          </select>
+          <input type="hidden" id="physprep-event-direction" value="HIGH">
+          <div style="display:flex; gap:4px;">
+            <button type="button" id="physprep-event-dir-high" onclick="physPrepSetDirection('HIGH')" style="padding:10px 14px; border:none; border-radius:8px; font-size:1.15em; cursor:pointer; background:#1565c0; color:white;" title="기록이 클수록 좋음">▲</button>
+            <button type="button" id="physprep-event-dir-low" onclick="physPrepSetDirection('LOW')" style="padding:10px 14px; border:none; border-radius:8px; font-size:1.15em; cursor:pointer; background:#ffebee; color:#d32f2f;" title="기록이 작을수록 좋음">▼</button>
+          </div>
+          <input type="number" id="physprep-event-maxscore" class="input-field" placeholder="만점(점)" style="flex:1; min-width:90px; margin:0;">
           <button class="btn-primary" onclick="physPrepAddEvent()" style="margin:0; flex:1; min-width:90px; background:#6a1b9a;">종목 등록</button>
         </div>
         <div style="overflow-x:auto;">
           <table style="width:100%; border-collapse:collapse; text-align:center; font-size:0.95em;">
-            <thead><tr style="background:#f3e5f5; border-bottom:2px solid #ccc;"><th style="padding:10px;">종목명</th><th style="padding:10px;">단위</th><th style="padding:10px;">방향</th><th style="padding:10px;">상태</th><th style="padding:10px;">관리</th></tr></thead>
+            <thead><tr style="background:#f3e5f5; border-bottom:2px solid #ccc;"><th style="padding:10px;">종목명</th><th style="padding:10px;">단위</th><th style="padding:10px;">방향</th><th style="padding:10px;">만점</th><th style="padding:10px;">관리</th></tr></thead>
             <tbody id="physprep-events-tbody"><tr><td colspan="5" style="padding:20px; color:#999;">불러오는 중입니다...</td></tr></tbody>
           </table>
         </div>
+        <div id="physprep-scoretable-editor" style="margin-top:15px;"></div>
       </div>
 
       <div class="card" style="border-top: 5px solid #6a1b9a; margin-bottom: 20px;">
@@ -235,6 +258,11 @@
         </div>
         <div id="physprep-admin-ranking-result"></div>
       </div>
+    </div>
+
+    <!-- [관리자] 수행평가 (추후 개발 예정) -->
+    <div id="content-pe-class-physexam" class="hidden">
+      <div class="card"><h3 style="margin-top:0; color:#203a43;">📝 수행평가 관리 (준비 중)</h3></div>
     </div>
 
     <!-- [관리자] PAPS 관리 -->
@@ -356,8 +384,49 @@
     <div id="content-pe-facility-gym" class="hidden"><div id="pe-facility-gym-root"><div style="text-align:center; color:#999; padding:20px;">불러오는 중입니다...</div></div></div>
     <div id="content-pe-facility-field" class="hidden"><div id="pe-facility-field-root"><div style="text-align:center; color:#999; padding:20px;">불러오는 중입니다...</div></div></div>
 
-    <!-- [관리자] 점심시간 시설 통합 위반기록 (풋살장·체육관·운동장 전체) -->
-    <div id="content-pe-facility-violations" class="hidden">
+    <!-- [관리자] 점심시간 관리 통합 - 관리학생 명단 / 반별 체육부장 지정 / 전체 위반기록 (풋살장·체육관·운동장 공용) -->
+    <div id="content-pe-facility-managers" class="hidden">
+      <div class="card" style="border-top: 5px solid #d32f2f; margin-bottom: 20px;">
+        <h3 style="margin-top:0; color:#b71c1c;">🎯 점심시간 시설 관리학생 명단</h3>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; background:#f0f2f5; padding:15px; border-radius:8px; margin-bottom:15px;">
+          <select id="facmgr-add-grade" class="input-field" style="flex:1; min-width:70px; margin:0;" onchange="facilityMgrAutoSearchStudentShared()"><option value="">학년</option><option value="1">1학년</option><option value="2">2학년</option><option value="3">3학년</option></select>
+          <select id="facmgr-add-class" class="input-field" style="flex:1; min-width:70px; margin:0;" onchange="facilityMgrAutoSearchStudentShared()"><option value="">반</option></select>
+          <select id="facmgr-add-num" class="input-field" style="flex:1; min-width:70px; margin:0;" onchange="facilityMgrAutoSearchStudentShared()"><option value="">번호</option></select>
+          <input type="text" id="facmgr-add-name" class="input-field" placeholder="조회 결과" readonly style="flex:1.5; min-width:100px; margin:0; background:#e8f0fe; text-align:center;">
+          <button class="btn-primary" id="btn-facmgr-add" onclick="facilityAddManagerShared()" disabled style="margin:0; flex:1; min-width:90px; background:#d32f2f;">명단추가</button>
+        </div>
+        <button class="btn-small" id="btn-facmgr-list-toggle" onclick="toggleFacMgrList()" style="background:#999; margin-bottom:10px;">명단 보기 ▾</button>
+        <div id="facmgr-list-wrap" class="hidden" style="overflow-x:auto;">
+          <table style="width:100%; border-collapse:collapse; text-align:center; font-size:0.95em;">
+            <thead><tr style="background:#ffebee; border-bottom:2px solid #ccc;"><th style="padding:10px;">학번</th><th style="padding:10px;">이름</th><th style="padding:10px;">학년</th><th style="padding:10px;">관리</th></tr></thead>
+            <tbody id="facmgr-tbody"><tr><td colspan="4" style="padding:20px; color:#999;">불러오는 중입니다...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card" style="border-top: 5px solid #00838f; margin-bottom: 20px;">
+        <h3 style="margin-top:0; color:#006064;">🎗️ 반별 체육부장 지정</h3>
+        <p style="font-size:0.85em; color:#666; margin-bottom:15px;">여기 지정된 학생만 "학년 매칭" 점심시간 시설 예약을 자기 반 대표로 신청할 수 있습니다. 체육교사는 별도 지정 없이 항상 신청할 수 있습니다.</p>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; background:#f0f2f5; padding:15px; border-radius:8px; margin-bottom:15px;">
+          <select id="classleader-grade" class="input-field" style="flex:1; min-width:70px; margin:0;" onchange="classLeaderAutoSearchStudent()"><option value="">학년</option><option value="1">1학년</option><option value="2">2학년</option><option value="3">3학년</option></select>
+          <select id="classleader-class" class="input-field" style="flex:1; min-width:70px; margin:0;" onchange="classLeaderAutoSearchStudent()"><option value="">반</option></select>
+          <select id="classleader-num" class="input-field" style="flex:1; min-width:70px; margin:0;" onchange="classLeaderAutoSearchStudent()"><option value="">번호</option></select>
+          <input type="text" id="classleader-name" class="input-field" placeholder="조회 결과" readonly style="flex:1.5; min-width:100px; margin:0; background:#e8f0fe; text-align:center;">
+          <button class="btn-primary" id="btn-classleader-set" onclick="classLeaderSetNow()" disabled style="margin:0; flex:1; min-width:90px; background:#00838f;">체육부장 지정</button>
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+          <button class="btn-small" id="btn-classleader-grade-1" onclick="toggleClassLeaderList('1')" style="background:#999;">1학년 명단</button>
+          <button class="btn-small" id="btn-classleader-grade-2" onclick="toggleClassLeaderList('2')" style="background:#999;">2학년 명단</button>
+          <button class="btn-small" id="btn-classleader-grade-3" onclick="toggleClassLeaderList('3')" style="background:#999;">3학년 명단</button>
+        </div>
+        <div id="classleader-list-wrap" class="hidden" style="overflow-x:auto;">
+          <table style="width:100%; border-collapse:collapse; text-align:center; font-size:0.95em;">
+            <thead><tr style="background:#e0f7fa; border-bottom:2px solid #ccc;"><th style="padding:10px;">학년</th><th style="padding:10px;">반</th><th style="padding:10px;">체육부장</th><th style="padding:10px;">학번</th><th style="padding:10px;">관리</th></tr></thead>
+            <tbody id="classleader-tbody"><tr><td colspan="5" style="padding:20px; color:#999;">불러오는 중입니다...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="card" style="border-top: 5px solid #d32f2f;">
         <h3 style="margin-top:0; color:#b71c1c;">🚨 점심시간 시설 이용규칙 위반 통합 조회</h3>
         <p style="font-size:0.85em; color:#888; margin-top:-8px;">풋살장·체육관·운동장에서 발생한 위반 기록을 모두 모아 보여줍니다.</p>
@@ -379,13 +448,14 @@
           </select>
         </div>
         <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; background:#f0f2f5; padding:15px; border-radius:8px; margin-bottom:15px;">
-          <select id="sportsclub-add-grade" class="input-field" style="flex:1; min-width:70px; margin:0;"><option value="">학년</option><option value="1">1학년</option><option value="2">2학년</option><option value="3">3학년</option></select>
-          <select id="sportsclub-add-class" class="input-field" style="flex:1; min-width:70px; margin:0;"><option value="">반</option></select>
-          <select id="sportsclub-add-num" class="input-field" style="flex:1; min-width:70px; margin:0;"><option value="">번호</option></select>
+          <select id="sportsclub-add-grade" class="input-field" style="flex:1; min-width:70px; margin:0;" onchange="sportsClubAutoSearchStudent()"><option value="">학년</option><option value="1">1학년</option><option value="2">2학년</option><option value="3">3학년</option></select>
+          <select id="sportsclub-add-class" class="input-field" style="flex:1; min-width:70px; margin:0;" onchange="sportsClubAutoSearchStudent()"><option value="">반</option></select>
+          <select id="sportsclub-add-num" class="input-field" style="flex:1; min-width:70px; margin:0;" onchange="sportsClubAutoSearchStudent()"><option value="">번호</option></select>
           <input type="text" id="sportsclub-add-name" class="input-field" placeholder="조회 결과" readonly style="flex:1.5; min-width:100px; margin:0; background:#e8f0fe; text-align:center;">
-          <button class="btn-small" onclick="sportsClubSearchStudent()" style="margin:0;">조회</button>
           <button class="btn-primary" id="btn-sportsclub-add" onclick="sportsClubAddMember()" disabled style="margin:0; flex:1; min-width:90px; background:#3949ab;">부원추가</button>
         </div>
+        <div id="sportsclub-captain-box" class="hidden"></div>
+        <div id="sportsclub-vicecaptain-box" class="hidden"></div>
         <div style="overflow-x:auto;">
           <table style="width:100%; border-collapse:collapse; text-align:center; font-size:0.95em;">
             <thead><tr style="background:#e8eaf6; border-bottom:2px solid #ccc;"><th style="padding:10px;">학번</th><th style="padding:10px;">이름</th><th style="padding:10px;">학년</th><th style="padding:10px;">관리</th></tr></thead>
@@ -404,5 +474,22 @@
       </div>
     </div>
 
+  </div>
+</div>
+
+<!-- 예산 등록 모달 (박정환 선생님 전용) -->
+<div id="budgetModal" class="custom-modal-overlay hidden">
+  <div class="custom-modal-box wide-left">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <h3 style="margin:0; color:#0d47a1;">💰 예산 등록</h3>
+      <button onclick="closeBudgetModal()" style="border:none; background:none; font-size:1.4em; line-height:1; cursor:pointer; color:#999; padding:0;">✕</button>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:10px;">
+      <input type="text" id="budget-type-input" class="input-field" placeholder="예산 종류 (예: 체육용품비)" style="margin:0;">
+      <input type="number" id="budget-allocated-input" class="input-field" placeholder="편성금액(원)" style="margin:0;" oninput="calcBudgetBalance()">
+      <input type="number" id="budget-used-input" class="input-field" placeholder="사용금액(원)" style="margin:0;" oninput="calcBudgetBalance()">
+      <input type="text" id="budget-balance-input" class="input-field" placeholder="잔액(자동)" readonly style="margin:0; background:#e8f0fe; color:#1e3c72; font-weight:bold;">
+    </div>
+    <button class="btn-primary" id="btn-budget-submit" onclick="submitBudgetItem()" style="background:#1e3c72; margin-top:16px;">등록</button>
   </div>
 </div>

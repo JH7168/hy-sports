@@ -9,18 +9,45 @@
   let activeGradeTab = "1";
   let papsRadarChartInstance = null;
   let papsTargetId = "";
+  let studentSearchSeq = 0;
 
   // =========================================================================
-  // 서버 통신 공통 헬퍼 (에러 핸들러 통일)
+  // 서버 통신 공통 헬퍼 (에러 핸들러 통일 + 중복클릭 방지)
   // 실패 시 기본적으로 알림창을 띄우고 reject하므로, 개별 호출부에서
   // 매번 withFailureHandler를 따로 작성하지 않아도 된다.
+  //
+  // 버튼을 onclick="foo()" 형태로 직접 호출하는 인라인 핸들러들은 실행 중에는
+  // window.event가 그 클릭 이벤트를 가리킨다(크롬/사파리 공통 동작, 이 앱의 주요
+  // 대상 브라우저). 이를 이용해 "지금 이 gsRun을 유발한 버튼"을 찾아 서버 응답이
+  // 올 때까지 자동으로 disabled 처리한다 — 응답 전에 여러 번 눌러서 같은 기록이
+  // 중복 등록되는 사고를 앱 전체에서 한 곳(gsRun)만 고쳐서 막는다. 한 클릭에서
+  // gsRun을 여러 번 호출하는 경우(Promise.all 등)에도 카운터로 세어, 전부 끝나야
+  // 다시 눌릴 수 있게 한다. 각 함수에 이미 있던 개별 disabled/텍스트 변경 로직과도
+  // 안전하게 같이 동작한다(서로 덮어써도 최종적으로는 disabled=false로 맞춰짐).
   // =========================================================================
   function gsRun(fnName) {
     const args = Array.prototype.slice.call(arguments, 1);
+    let triggerBtn = null;
+    try {
+      const ev = window.event;
+      if (ev && ev.target && typeof ev.target.closest === 'function') triggerBtn = ev.target.closest('button');
+    } catch (e) { triggerBtn = null; }
+    if (triggerBtn) {
+      const pending = (parseInt(triggerBtn.dataset.gsPending || '0', 10)) + 1;
+      triggerBtn.dataset.gsPending = pending;
+      triggerBtn.disabled = true;
+    }
+    function releaseBtn() {
+      if (!triggerBtn) return;
+      const pending = Math.max(0, (parseInt(triggerBtn.dataset.gsPending || '1', 10)) - 1);
+      triggerBtn.dataset.gsPending = pending;
+      if (pending === 0) triggerBtn.disabled = false;
+    }
     return new Promise(function(resolve, reject) {
       google.script.run
-        .withSuccessHandler(resolve)
+        .withSuccessHandler(function(res) { releaseBtn(); resolve(res); })
         .withFailureHandler(function(err) {
+          releaseBtn();
           showAlert('⚠️ 서버 오류가 발생했습니다: ' + (err && err.message ? err.message : err));
           reject(err);
         })[fnName].apply(null, args);
@@ -115,16 +142,50 @@
     document.getElementById('confirm-yes-btn').onclick = function() { confirmBox.classList.add('hidden'); if(yesCallback) yesCallback(); };
   }
 
+  // showConfirm과 같은 커스텀 모달 패턴에 텍스트 입력칸 하나를 더한 버전.
+  function showPromptModal(msg, placeholder, onSubmit) {
+    let box = document.getElementById('customPrompt');
+    if (!box) {
+      box = document.createElement('div'); box.id = 'customPrompt'; box.className = 'custom-modal-overlay hidden';
+      box.innerHTML = '<div class="custom-modal-box"><div id="customPromptMessage" class="custom-modal-text" style="margin-bottom:14px; font-size:1.05em; color:#333; line-height:1.5; word-break:keep-all;"></div><textarea id="customPromptInput" class="input-field" style="margin-bottom:14px; height:70px; resize:vertical;"></textarea><div style="display:flex; gap:10px;"><button class="custom-modal-btn" id="prompt-ok-btn" style="background:#1e3c72; flex:1;">확인</button><button class="custom-modal-btn" onclick="document.getElementById(\'customPrompt\').classList.add(\'hidden\')" style="background:#ccc; color:#333; flex:1;">취소</button></div></div>';
+      document.body.appendChild(box);
+    }
+    document.getElementById('customPromptMessage').innerHTML = msg;
+    const input = document.getElementById('customPromptInput');
+    input.value = ''; input.placeholder = placeholder || '';
+    box.classList.remove('hidden');
+    document.getElementById('prompt-ok-btn').onclick = function() {
+      const val = input.value.trim();
+      if (!val) return;
+      box.classList.add('hidden');
+      if (onSubmit) onSubmit(val);
+    };
+  }
+
   function toggleView(viewId) {
     document.getElementById('login-view')?.classList.add('hidden'); document.getElementById('signup-view')?.classList.add('hidden');
     document.getElementById('main-view')?.classList.add('hidden'); document.getElementById('pe-main-view')?.classList.add('hidden');
     document.getElementById(viewId)?.classList.remove('hidden'); window.scrollTo(0, 0);
   }
 
+  // 스포츠리그 > 스포츠클럽처럼 드롭다운 안에 또 하위메뉴가 있는 2단 구조는 마우스
+  // 호버만으로는 터치기기에서 아예 열리지 않으므로, 클릭/탭으로도 열고 닫을 수 있게 한다.
+  function toggleSubdropdown(e, btn) {
+    e.preventDefault(); e.stopPropagation();
+    const parent = btn.closest('.subdropdown');
+    const wasOpen = parent.classList.contains('open');
+    document.querySelectorAll('.subdropdown.open').forEach(el => el.classList.remove('open'));
+    if (!wasOpen) parent.classList.add('open');
+  }
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('.subdropdown')) document.querySelectorAll('.subdropdown.open').forEach(el => el.classList.remove('open'));
+  });
+
   function switchTab(tabName, parentId = null) {
-    const tabs = ['home', 'paps', 'sports', 'friendly', 'sportsclub-soccer', 'sportsclub-basketball', 'sportsclub-volleyball', 'sportsclub-badminton', 'afterschool-main', 'afterschool-small', 'lunch-gym', 'lunch-field', 'lunch-futsal', 'suggestion'];
+    document.querySelectorAll('.subdropdown.open').forEach(el => el.classList.remove('open'));
+    const tabs = ['home', 'class-physexam', 'paps', 'sports', 'friendly', 'sportsclub-soccer', 'sportsclub-basketball', 'sportsclub-volleyball', 'sportsclub-badminton', 'afterschool-main', 'afterschool-small', 'lunch-gym', 'lunch-field', 'lunch-futsal', 'lunch-manage'];
     tabs.forEach(t => { const content = document.getElementById('content-' + t); if(content) content.classList.add('hidden'); });
-    const mainTabs = ['tab-home', 'tab-paps', 'tab-sports', 'tab-friendly', 'tab-sportsclub', 'tab-afterschool', 'tab-lunch', 'tab-suggestion'];
+    const mainTabs = ['tab-home', 'tab-class', 'tab-lunch', 'tab-afterschool', 'tab-leagues', 'tab-sports'];
     mainTabs.forEach(t => { const tab = document.getElementById(t); if(tab) tab.classList.remove('active'); });
     const targetContent = document.getElementById('content-' + tabName); if(targetContent) targetContent.classList.remove('hidden');
     if (parentId) { const p = document.getElementById(parentId); if (p) p.classList.add('active'); } else { const t = document.getElementById('tab-' + tabName); if(t) t.classList.add('active'); }
@@ -133,7 +194,7 @@
     if (tabName === 'lunch-futsal') loadFacilityStudentView('FUTSAL');
     if (tabName === 'lunch-gym') loadFacilityStudentView('GYM');
     if (tabName === 'lunch-field') loadFacilityStudentView('FIELD');
-    if (tabName === 'suggestion') loadSuggestionStudentView();
+    if (tabName === 'lunch-manage') loadLunchManageView();
     if (tabName.indexOf('sportsclub-') === 0) {
       const clubMap = { 'sportsclub-soccer': 'SOCCER', 'sportsclub-basketball': 'BASKETBALL', 'sportsclub-volleyball': 'VOLLEYBALL', 'sportsclub-badminton': 'BADMINTON' };
       loadSportsClubView(clubMap[tabName]);
@@ -145,10 +206,10 @@
   function closePETeacherView() { document.getElementById('pe-main-view')?.classList.add('hidden'); document.getElementById('main-view')?.classList.remove('hidden'); switchTab('home'); }
 
   function switchPETab(peTabName) {
-    const peTabs = ['pe-home', 'pe-inventory-status', 'pe-purchase-list', 'pe-afterschool-main', 'pe-afterschool-small', 'pe-paps-manage', 'pe-sports-manage', 'pe-league-manage', 'pe-facility-futsal', 'pe-facility-gym', 'pe-facility-field', 'pe-facility-violations', 'pe-sportsclub-manage', 'pe-suggestion-manage'];
+    const peTabs = ['pe-home', 'pe-class-physexam', 'pe-inventory-status', 'pe-purchase-list', 'pe-afterschool-main', 'pe-afterschool-small', 'pe-paps-manage', 'pe-sports-manage', 'pe-league-manage', 'pe-facility-managers', 'pe-facility-futsal', 'pe-facility-gym', 'pe-facility-field', 'pe-sportsclub-manage', 'pe-suggestion-manage'];
     peTabs.forEach(t => { const c = document.getElementById('content-' + t); if(c) c.classList.add('hidden'); });
 
-    const mainBtns = ['tab-pe-home', 'tab-pe-inventory-manage', 'tab-pe-afterschool-manage', 'tab-pe-paps-manage', 'tab-pe-sports-manage', 'tab-pe-league-manage', 'tab-pe-lunch-manage', 'tab-pe-sportsclub-manage', 'tab-pe-suggestion-manage'];
+    const mainBtns = ['tab-pe-home', 'tab-pe-class-menu', 'tab-pe-lunch-manage', 'tab-pe-afterschool-manage', 'tab-pe-leagues-menu', 'tab-pe-sports-manage', 'tab-pe-inventory-manage'];
     mainBtns.forEach(b => { const btn = document.getElementById(b); if(btn) btn.classList.remove('active'); });
 
     const targetC = document.getElementById('content-' + peTabName); if(targetC) targetC.classList.remove('hidden');
@@ -159,6 +220,10 @@
       document.getElementById('tab-pe-afterschool-manage')?.classList.add('active');
     } else if(peTabName.indexOf('pe-facility-') === 0) {
       document.getElementById('tab-pe-lunch-manage')?.classList.add('active');
+    } else if(peTabName === 'pe-paps-manage' || peTabName === 'pe-class-physexam') {
+      document.getElementById('tab-pe-class-menu')?.classList.add('active');
+    } else if(peTabName === 'pe-sportsclub-manage' || peTabName === 'pe-league-manage') {
+      document.getElementById('tab-pe-leagues-menu')?.classList.add('active');
     } else {
       document.getElementById('tab-' + peTabName)?.classList.add('active');
     }
@@ -172,7 +237,7 @@
     if (peTabName === 'pe-facility-futsal') openFacilityAdminTab('FUTSAL');
     if (peTabName === 'pe-facility-gym') openFacilityAdminTab('GYM');
     if (peTabName === 'pe-facility-field') openFacilityAdminTab('FIELD');
-    if (peTabName === 'pe-facility-violations') loadAllFacilityViolationsAdmin();
+    if (peTabName === 'pe-facility-managers') { loadFacilityManagersShared(); loadFacilityClassLeadersAdmin(); loadAllFacilityViolationsAdmin(); }
     if (peTabName === 'pe-sportsclub-manage') loadSportsClubAdmin();
     if (peTabName === 'pe-suggestion-manage') loadSuggestionAdmin();
     window.scrollTo(0, 0);
@@ -198,15 +263,21 @@
     else { if(matchText) matchText.style.display = 'none'; if(mismatchText) mismatchText.style.display = 'block'; }
   }
 
+  function searchStudentAuto() {
+    const g = document.getElementById('reg-grade').value, c = document.getElementById('reg-class').value, n = document.getElementById('reg-num').value;
+    if (g && c && n) searchStudent();
+  }
+
   function searchStudent() {
     const g = document.getElementById('reg-grade').value, c = document.getElementById('reg-class').value, n = document.getElementById('reg-num').value;
-    if(!g || !c || !n) { showAlert("학년, 반, 번호를 모두 선택하세요."); return; }
-    const searchBtn = document.querySelector('#signup-student-form .btn-small'); if(searchBtn) { searchBtn.innerText = "조회 중..."; searchBtn.disabled = true; }
-    const nameInput = document.getElementById('reg-student-name'); if(nameInput) nameInput.value = "서버 통신 중...";
+    if(!g || !c || !n) return;
+    const nameInput = document.getElementById('reg-student-name'); if(nameInput) nameInput.value = "조회 중...";
+    verifiedStudentName = "";
+    const mySeq = ++studentSearchSeq; // 응답이 뒤섞여 도착해도 가장 마지막 조회 결과만 반영한다.
     gsRun('findStudent', g, c, n).then(function(res) {
-      if(searchBtn) { searchBtn.innerText = "학생 조회"; searchBtn.disabled = false; }
+      if (mySeq !== studentSearchSeq) return;
       if(res.success) { if(nameInput) nameInput.value = res.name; verifiedStudentName = res.name; } else { if(nameInput) nameInput.value = ""; showAlert(res.message); }
-    }).catch(function() { if(searchBtn) { searchBtn.innerText = "학생 조회"; searchBtn.disabled = false; } });
+    });
   }
 
   function attemptSignup() {
@@ -247,6 +318,11 @@
         // 친사리그는 1·2학년만 참여 대상이라 3학년 학생에게는 메뉴 자체를 숨긴다.
         if (res.role === '학생' && res.id.toString().charAt(0) === '3') document.getElementById('tab-friendly')?.classList.add('hidden');
         else document.getElementById('tab-friendly')?.classList.remove('hidden');
+        // 점심시간 > 관리 메뉴는 체육교사이거나, 체육교사가 지정한 관리학생에게만 보인다.
+        gsRun('amIFacilityManager', res.token).then(function(mres) {
+          if (mres.success && mres.isManager) document.getElementById('tab-lunch-manage')?.classList.remove('hidden');
+          else document.getElementById('tab-lunch-manage')?.classList.add('hidden');
+        });
         loadBoard(); loadPaps(); switchTab('home');
       } else { const lmsg = document.getElementById('login-msg'); if(lmsg) lmsg.innerText = res.message; }
     }).catch(function() { if(loginBtn) { loginBtn.innerText = "로그인"; loginBtn.disabled = false; } });
@@ -257,6 +333,8 @@
     currentUser = null; document.getElementById('login-id').value = ''; document.getElementById('login-pw').value = '';
     document.getElementById('tab-pe-teacher')?.classList.add('hidden');
     document.getElementById('tab-pe-suggestion-manage')?.classList.add('hidden');
+    document.getElementById('tab-lunch-manage')?.classList.add('hidden');
+    document.getElementById('suggestionModal')?.classList.add('hidden');
     toggleView('login-view'); switchTab('home');
   }
 

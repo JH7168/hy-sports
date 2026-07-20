@@ -2,6 +2,15 @@
   // =========================================================================
   // 건의함 모듈 (학생 제출은 실명, 조회는 박정환 계정 전용)
   // =========================================================================
+  function openSuggestionModal() {
+    document.getElementById('suggestionModal')?.classList.remove('hidden');
+    loadSuggestionStudentView();
+  }
+
+  function closeSuggestionModal() {
+    document.getElementById('suggestionModal')?.classList.add('hidden');
+  }
+
   function loadSuggestionStudentView() {
     const container = document.getElementById('suggestion-student-container');
     container.innerHTML = `<div class="card" style="text-align:center; color:#999;">불러오는 중입니다...</div>`;
@@ -14,7 +23,7 @@
 
   function renderSuggestionStudentView(res) {
     const container = document.getElementById('suggestion-student-container');
-    let html = `<div class="card" style="border-top:5px solid #455a64;"><h3 style="margin-top:0; color:#263238;">✉️ 체육인성부에 건의하기</h3><p style="font-size:0.85em; color:#888; margin-top:-8px;">이 홈페이지는 여러분이 함께 만들어가는 공간입니다. 바뀌었으면 하는 점을 자유롭게 남겨주세요.<br>익명이 아닌 실명(학번·이름)으로 담당 체육교사에게만 전달됩니다.</p><textarea id="suggestion-content" class="input-field" placeholder="건의하고 싶은 내용을 적어주세요" style="height:120px; resize:vertical;"></textarea><button class="btn-primary" style="background:#455a64;" onclick="submitSuggestionNow()">건의 제출하기</button></div>`;
+    let html = `<div class="card" style="border-top:5px solid #455a64;"><h3 style="margin-top:0; color:#263238;">✉️ 체육인성부에 건의하기</h3><p style="font-size:0.85em; color:#888; margin-top:-8px;">이 홈페이지는 여러분이 함께 만들어가는 공간입니다. 바뀌었으면 하는 점을 자유롭게 남겨주세요.</p><div style="background:#fff3e0; border:1px solid #ffcc80; border-radius:8px; padding:10px 12px; font-size:0.85em; color:#795548; margin-bottom:12px;">⚠️ 익명이 아니며, 제출한 건의사항에는 학번과 이름이 함께 기록되어 담당 체육교사에게 전달됩니다.</div><textarea id="suggestion-content" class="input-field" placeholder="건의하고 싶은 내용을 적어주세요" style="height:120px; resize:vertical;"></textarea><button class="btn-primary" style="background:#455a64;" onclick="submitSuggestionNow()">건의 제출하기</button></div>`;
 
     html += `<div class="card" style="border-top:5px solid #455a64;"><h3 style="margin-top:0; color:#263238;">📜 내가 제출한 건의 이력</h3>`;
     if (!res.success || res.list.length === 0) {
