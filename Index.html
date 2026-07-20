@@ -5,10 +5,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>한영고등학교 체육인성부</title>
-  
-  <!-- 차트 및 엑셀 라이브러리 -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+  <!-- 외부 리소스 도메인에 미리 연결해 초기 로딩 속도를 조금이라도 앞당긴다 -->
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com">
+
+  <!-- 차트 및 엑셀 라이브러리: 둘 다 사용자가 특정 화면(PAPS 차트, 엑셀 업/다운로드)에
+       들어갔을 때만 쓰이므로 defer로 불러와 초기 화면 렌더링을 막지 않게 한다 -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
 
   <style>
     /* 통합 CSS 디자인 영역 */
@@ -140,6 +145,7 @@
   <?!= include('JS_Facility'); ?>
   <?!= include('JS_SportsClub'); ?>
   <?!= include('JS_Suggestion'); ?>
+  <?!= include('JS_League'); ?>
 
 </body>
 </html>

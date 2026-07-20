@@ -69,6 +69,9 @@ function setupSystemSheets() {
   // 건의함 시트 세팅
   setupSuggestionSheets();
 
+  // 친사리그 시트 세팅
+  setupLeagueSheets();
+
   // 교사 가입 인증 코드: 소스코드가 아닌 스크립트 속성에 보관 (없을 때만 최초 1회 초기화)
   const props = PropertiesService.getScriptProperties();
   if (!props.getProperty('PE_TEACHER_CODE')) props.setProperty('PE_TEACHER_CODE', 'PY4312');

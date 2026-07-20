@@ -102,9 +102,9 @@ function getPhysPrepRoster(token) {
     const data = ss.getSheetByName('체대입시반_명단').getDataRange().getValues();
     const list = [];
     for (let i = 1; i < data.length; i++) {
-      if (data[i][0]) list.push({ id: data[i][0].toString(), name: data[i][1], grade: data[i][2], regDate: data[i][3] });
+      if (data[i][0]) list.push({ id: data[i][0].toString(), name: data[i][1], grade: data[i][2], regDate: toDateStr_(data[i][3]) });
     }
-    return { success: true, list: list };
+    return sanitizeDates_({ success: true, list: list });
   } catch (e) { return { success: false, message: e.message, list: [] }; }
 }
 
@@ -273,12 +273,12 @@ function getMyPhysPrepRecords(token) {
       const row = selfData[i];
       if (row[0] && row[0].toString().trim() === studentId) {
         const meta = eventMeta[row[2]] || { name: '(삭제된 종목)', unit: '' };
-        selfList.push({ eventName: meta.name, unit: meta.unit, value: row[3], date: row[4] });
+        selfList.push({ eventName: meta.name, unit: meta.unit, value: row[3], date: toDateTimeStr_(row[4]) });
       }
     }
     selfList.reverse();
 
-    return { success: true, official: officialResult, self: selfList };
+    return sanitizeDates_({ success: true, official: officialResult, self: selfList });
   } catch (e) { return { success: false, message: e.message }; }
 }
 

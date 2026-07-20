@@ -41,10 +41,10 @@ function getSuggestions(token) {
     const list = [];
     for (let i = 1; i < data.length; i++) {
       if (!data[i][0]) continue;
-      list.push({ id: data[i][0], studentId: data[i][1], name: data[i][2], content: data[i][3], date: data[i][4] });
+      list.push({ id: data[i][0], studentId: data[i][1], name: data[i][2], content: data[i][3], date: toDateTimeStr_(data[i][4]) });
     }
     list.reverse();
-    return { success: true, list: list };
+    return sanitizeDates_({ success: true, list: list });
   } catch (e) { return { success: false, message: e.message, list: [] }; }
 }
 
@@ -67,9 +67,9 @@ function getMySuggestions(token) {
     const data = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('건의함').getDataRange().getValues();
     const list = [];
     for (let i = 1; i < data.length; i++) {
-      if (data[i][1] && data[i][1].toString() === session.id.toString()) list.push({ id: data[i][0], content: data[i][3], date: data[i][4] });
+      if (data[i][1] && data[i][1].toString() === session.id.toString()) list.push({ id: data[i][0], content: data[i][3], date: toDateTimeStr_(data[i][4]) });
     }
     list.reverse();
-    return { success: true, list: list };
+    return sanitizeDates_({ success: true, list: list });
   } catch (e) { return { success: false, message: e.message, list: [] }; }
 }

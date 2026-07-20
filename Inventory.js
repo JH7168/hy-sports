@@ -69,6 +69,6 @@ function getPurchaseRequests(token) {
         totals[teacherName] += totalAmount;
       }
     }
-    return { list: list.reverse(), totals: totals };
+    return sanitizeDates_({ list: list.reverse(), totals: totals });
   } catch (e) { return { list: [], totals: { '박정환': 0, '문승연': 0, '양서경': 0 } }; }
 }

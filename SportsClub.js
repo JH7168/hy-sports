@@ -73,8 +73,8 @@ function getSportsClubMembers(club, token) {
     requirePeTeacher(token);
     const data = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('스포츠클럽_명단').getDataRange().getValues();
     const list = [];
-    for (let i = 1; i < data.length; i++) { if (data[i][0] === club) list.push({ id: data[i][1].toString(), name: data[i][2], grade: data[i][3], regDate: data[i][4] }); }
-    return { success: true, list: list };
+    for (let i = 1; i < data.length; i++) { if (data[i][0] === club) list.push({ id: data[i][1].toString(), name: data[i][2], grade: data[i][3], regDate: toDateStr_(data[i][4]) }); }
+    return sanitizeDates_({ success: true, list: list });
   } catch (e) { return { success: false, message: e.message, list: [] }; }
 }
 
@@ -148,9 +148,9 @@ function getSportsClubPosts(club, token) {
     const data = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('스포츠클럽_게시글').getDataRange().getValues();
     const list = [];
     for (let i = 1; i < data.length; i++) {
-      if (data[i][0] === club) list.push({ id: data[i][1], authorId: data[i][2], authorName: data[i][3], title: data[i][4], content: data[i][5], createdAt: data[i][6], updatedAt: data[i][7], mine: data[i][2].toString() === session.id.toString() });
+      if (data[i][0] === club) list.push({ id: data[i][1], authorId: data[i][2], authorName: data[i][3], title: data[i][4], content: data[i][5], createdAt: toDateTimeStr_(data[i][6]), updatedAt: toDateTimeStr_(data[i][7]), mine: data[i][2].toString() === session.id.toString() });
     }
     list.reverse();
-    return { success: true, list: list };
+    return sanitizeDates_({ success: true, list: list });
   } catch (e) { return { success: false, message: e.message, list: [] }; }
 }

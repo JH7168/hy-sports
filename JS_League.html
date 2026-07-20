@@ -1,0 +1,386 @@
+<script>
+  // =========================================================================
+  // 친사리그 모듈 (교내 스포츠리그 - 종목/팀/대진/달력)
+  // =========================================================================
+  const LEAGUE_SPORT_PRESETS = ['축구', '풋살', '농구', '족구', '배구'];
+  const LEAGUE_WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
+  let leagueEventsCache = [];
+  let leagueSelectedEventId = null;
+  let leagueAdminSelectedEventId = null;
+  let leagueCalendarData = null;
+  let leagueCalendarYear = null;
+  let leagueCalendarMonth = null; // 0-indexed
+  let leagueSelectedDate = null;
+
+  function leagueFormatLabel(format) { return format === 'LEAGUE' ? '리그전' : '토너먼트'; }
+  function leagueJoinLabel(joinMode) { return joinMode === 'REGISTRATION' ? '지원자 모집' : '반별 참가'; }
+  function leagueGradeLabel(g) { return g === 'BOTH' ? '1·2학년 전체' : (g + '학년 전용'); }
+  function leagueDateStr_(d) { const p = n => n.toString().padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; }
+
+  // 시작일을 정하면 종료일이 시작일보다 빠를 수 없도록, 종료일 입력의 최소값을 시작일로 맞추고
+  // 아직 종료일이 비어있거나 시작일보다 이전이면 종료일 선택 시 시작일이 먼저 보이도록 채워준다.
+  function leagueSyncEndDateMin(prefix) {
+    const start = document.getElementById(`${prefix}-start`).value;
+    const endInput = document.getElementById(`${prefix}-end`);
+    if (!start || !endInput) return;
+    endInput.min = start;
+    if (!endInput.value || endInput.value < start) endInput.value = start;
+  }
+
+  // -------------------------------------------------------------------------
+  // 학생/교사 화면 - 종목 목록 → 달력
+  // -------------------------------------------------------------------------
+  function loadLeagueStudentView() {
+    const container = document.getElementById('friendly-student-container');
+    container.innerHTML = `<div class="card" style="text-align:center; color:#999;">불러오는 중입니다...</div>`;
+    leagueSelectedEventId = null;
+    gsRun('getLeagueEvents', currentUser.token)
+      .then(function(res) { renderLeagueEventList(res); })
+      .catch(function(err) { container.innerHTML = `<div class="card" style="text-align:center; color:red;">불러오지 못했습니다: ${escapeHtml(err && err.message ? err.message : err)}</div>`; });
+  }
+
+  function renderLeagueEventList(res) {
+    const container = document.getElementById('friendly-student-container');
+    try {
+      if (!res.success) { container.innerHTML = `<div class="card" style="text-align:center; color:#666;">${escapeHtml(res.message)}</div>`; return; }
+      leagueEventsCache = res.list;
+      let html = `<div class="card" style="border-top:5px solid #5e35b1;"><h3 style="margin-top:0; color:#4527a0;">🤝 친사리그</h3><p style="font-size:0.85em; color:#888; margin-top:-8px;">점심시간을 이용해 진행되는 교내 스포츠리그입니다. 날짜를 눌러 자세한 일정을 확인하세요.</p></div>`;
+      if (res.list.length === 0) {
+        html += `<div class="card" style="text-align:center; color:#999; padding:20px;">아직 발표된 친사리그 일정이 없습니다.</div>`;
+      } else {
+        res.list.forEach(ev => {
+          html += `<div class="card" style="border-top:4px solid #5e35b1; cursor:pointer;" onclick="leagueOpenEventCalendar('${ev.id}')"><div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;"><div style="font-weight:bold; color:#4527a0; font-size:1.15em;">🏆 ${escapeHtml(ev.sportName)}</div><div style="font-size:0.8em; color:white; background:#5e35b1; padding:3px 10px; border-radius:12px;">${leagueFormatLabel(ev.format)}</div></div><div style="font-size:0.85em; color:#666; margin-top:8px;">${escapeHtml(ev.startDate)} ~ ${escapeHtml(ev.endDate)} · ${leagueJoinLabel(ev.joinMode)} · ${leagueGradeLabel(ev.targetGrade)}</div></div>`;
+        });
+      }
+      container.innerHTML = html;
+    } catch (renderErr) { container.innerHTML = `<div class="card" style="text-align:center; color:red;">화면 표시 중 오류: ${escapeHtml(renderErr.message)}</div>`; }
+  }
+
+  function leagueOpenEventCalendar(eventId) {
+    leagueSelectedEventId = eventId;
+    const container = document.getElementById('friendly-student-container');
+    container.innerHTML = `<div class="card" style="text-align:center; color:#999;">불러오는 중입니다...</div>`;
+    gsRun('getLeagueCalendar', eventId, currentUser.token).then(function(res) {
+      if (!res.success) { container.innerHTML = `<div class="card" style="text-align:center; color:red;">${escapeHtml(res.message)}</div>`; return; }
+      leagueCalendarData = res;
+      const start = new Date(res.event.startDate + 'T00:00:00');
+      leagueCalendarYear = start.getFullYear();
+      leagueCalendarMonth = start.getMonth();
+      leagueSelectedDate = null;
+      renderLeagueEventDetail();
+    }).catch(function(err) { container.innerHTML = `<div class="card" style="text-align:center; color:red;">불러오지 못했습니다: ${escapeHtml(err && err.message ? err.message : err)}</div>`; });
+  }
+
+  function renderLeagueEventDetail() {
+    const container = document.getElementById('friendly-student-container');
+    const ev = leagueCalendarData.event;
+    let html = `<button class="btn-small" style="background:#999; margin-bottom:15px;" onclick="loadLeagueStudentView()">← 목록으로</button>`;
+    html += `<div class="card" style="border-top:5px solid #5e35b1;"><h3 style="margin-top:0; color:#4527a0;">🏆 ${escapeHtml(ev.sportName)} (${leagueFormatLabel(ev.format)})</h3><p style="font-size:0.85em; color:#666; margin-top:-8px;">${escapeHtml(ev.startDate)} ~ ${escapeHtml(ev.endDate)} · ${leagueJoinLabel(ev.joinMode)} · ${leagueGradeLabel(ev.targetGrade)}</p>`;
+    html += `<div id="league-calendar-root"></div>`;
+    html += `<div id="league-day-detail" style="margin-top:15px;"></div>`;
+    html += `<button class="btn-small" style="background:#5e35b1; margin-top:15px;" onclick="leagueShowFullBracket()">📋 전체 팀/대진 한눈에 보기</button>`;
+    html += `<div id="league-full-bracket" style="margin-top:15px;"></div>`;
+    html += `</div>`;
+    container.innerHTML = html;
+    leagueRenderCalendar();
+  }
+
+  function leagueChangeMonth(delta) {
+    leagueCalendarMonth += delta;
+    if (leagueCalendarMonth < 0) { leagueCalendarMonth = 11; leagueCalendarYear--; }
+    if (leagueCalendarMonth > 11) { leagueCalendarMonth = 0; leagueCalendarYear++; }
+    leagueRenderCalendar();
+  }
+
+  function leagueRenderCalendar() {
+    const root = document.getElementById('league-calendar-root');
+    if (!root) return;
+    const y = leagueCalendarYear, m = leagueCalendarMonth;
+    const first = new Date(y, m, 1);
+    const daysInMonth = new Date(y, m + 1, 0).getDate();
+    const startOffset = first.getDay();
+    let html = `<div style="display:flex; justify-content:space-between; align-items:center; margin:15px 0 10px;"><button class="btn-small" style="background:#5e35b1; padding:8px 14px;" onclick="leagueChangeMonth(-1)">◀</button><div style="font-weight:bold; color:#4527a0; font-size:1.1em;">${y}년 ${m + 1}월</div><button class="btn-small" style="background:#5e35b1; padding:8px 14px;" onclick="leagueChangeMonth(1)">▶</button></div>`;
+    html += `<table style="width:100%; border-collapse:collapse; text-align:center; table-layout:fixed;"><thead><tr>${LEAGUE_WEEKDAY_LABELS.map(d => `<th style="padding:6px 2px; font-size:0.8em; color:#666;">${d}</th>`).join('')}</tr></thead><tbody><tr>`;
+    for (let i = 0; i < startOffset; i++) html += `<td></td>`;
+    let col = startOffset;
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = leagueDateStr_(new Date(y, m, d));
+      const info = leagueCalendarData.byDate[dateStr];
+      const hasItems = info && (info.matches.length > 0 || info.notes.length > 0);
+      const isSelected = leagueSelectedDate === dateStr;
+      html += `<td style="padding:3px;"><div onclick="leagueSelectDate('${dateStr}')" style="cursor:pointer; padding:8px 2px; border-radius:8px; font-size:0.9em; ${isSelected ? 'background:#5e35b1; color:white; font-weight:bold;' : (hasItems ? 'background:#ede7f6; color:#4527a0; font-weight:bold;' : 'color:#444;')}">${d}${hasItems ? '<div style="font-size:0.6em; margin-top:2px;">●</div>' : ''}</div></td>`;
+      col++;
+      if (col % 7 === 0 && d !== daysInMonth) html += `</tr><tr>`;
+    }
+    html += `</tr></tbody></table>`;
+    root.innerHTML = html;
+    if (leagueSelectedDate) leagueRenderDayDetail();
+  }
+
+  function leagueSelectDate(dateStr) {
+    leagueSelectedDate = dateStr;
+    leagueRenderCalendar();
+  }
+
+  function leagueRenderDayDetail() {
+    const el = document.getElementById('league-day-detail');
+    if (!el) return;
+    const info = leagueCalendarData.byDate[leagueSelectedDate] || { matches: [], notes: [] };
+    let html = `<div style="background:#f5f3fb; border-radius:10px; padding:15px;"><h4 style="margin-top:0; color:#4527a0;">🗓️ ${escapeHtml(leagueSelectedDate)} 일정</h4>`;
+    if (info.matches.length === 0 && info.notes.length === 0) {
+      html += `<div style="color:#999; font-size:0.9em;">이 날은 등록된 일정이 없습니다.</div>`;
+    } else {
+      info.notes.forEach(n => { html += `<div style="background:white; border-radius:6px; padding:10px; margin-bottom:8px; font-size:0.92em;">📌 ${escapeHtml(n.content)}</div>`; });
+      info.matches.forEach(mt => { html += `<div style="background:white; border-radius:6px; padding:10px; margin-bottom:8px; font-size:0.92em;"><b>${escapeHtml(mt.round)}</b> · ${escapeHtml(mt.teamA)} ${mt.teamB ? 'vs ' + escapeHtml(mt.teamB) : '(부전승)'}${mt.place ? ' · ' + escapeHtml(mt.place) : ''}${mt.result ? `<br><span style="color:#5e35b1; font-weight:bold;">결과: ${escapeHtml(mt.result)}</span>` : ''}</div>`; });
+    }
+    html += `</div>`;
+    el.innerHTML = html;
+  }
+
+  function leagueShowFullBracket() {
+    const el = document.getElementById('league-full-bracket');
+    el.innerHTML = `<div style="text-align:center; color:#999; padding:10px;">불러오는 중입니다...</div>`;
+    Promise.all([
+      gsRun('getLeagueTeams', leagueSelectedEventId, currentUser.token),
+      gsRun('getLeagueMatches', leagueSelectedEventId, currentUser.token)
+    ]).then(function(results) {
+      const teamsRes = results[0], matchesRes = results[1];
+      let html = '';
+      html += `<div style="margin-bottom:10px;"><b style="color:#4527a0;">참가팀 (${teamsRes.success ? teamsRes.list.length : 0}팀)</b><div style="font-size:0.9em; color:#555; margin-top:5px;">${teamsRes.success ? teamsRes.list.map(t => escapeHtml(t.name)).join(', ') : ''}</div></div>`;
+      if (matchesRes.success && matchesRes.list.length > 0) {
+        html += `<div style="overflow-x:auto;"><table style="width:100%; border-collapse:collapse; text-align:center; font-size:0.88em;"><thead><tr style="background:#ede7f6;"><th style="padding:6px;">회차</th><th style="padding:6px;">대진</th><th style="padding:6px;">날짜</th><th style="padding:6px;">장소</th><th style="padding:6px;">결과</th></tr></thead><tbody>`;
+        matchesRes.list.forEach(mt => {
+          html += `<tr style="border-bottom:1px solid #eee;"><td style="padding:6px;">${escapeHtml(mt.round)}</td><td style="padding:6px; font-weight:bold;">${escapeHtml(mt.teamA)} ${mt.teamB ? 'vs ' + escapeHtml(mt.teamB) : '(부전승)'}</td><td style="padding:6px;">${escapeHtml(mt.scheduledDate)}</td><td style="padding:6px;">${escapeHtml(mt.place)}</td><td style="padding:6px; color:#5e35b1; font-weight:bold;">${escapeHtml(mt.result)}</td></tr>`;
+        });
+        html += `</tbody></table></div>`;
+      } else {
+        html += `<div style="color:#999; text-align:center; padding:10px;">아직 편성된 대진이 없습니다.</div>`;
+      }
+      el.innerHTML = html;
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // 관리자 - 종목 목록/생성
+  // -------------------------------------------------------------------------
+  function leagueToggleCustomSport(prefix) {
+    const sel = document.getElementById(`${prefix}-sport-select`);
+    const custom = document.getElementById(`${prefix}-sport-custom`);
+    custom.classList.toggle('hidden', sel.value !== '직접입력');
+  }
+
+  function loadLeagueAdmin() {
+    leagueAdminSelectedEventId = null;
+    const detail = document.getElementById('league-admin-detail'); if (detail) detail.innerHTML = '';
+    const list = document.getElementById('league-admin-event-list');
+    list.innerHTML = `<div style="text-align:center; color:#999; padding:15px;">불러오는 중입니다...</div>`;
+    gsRun('getLeagueEvents', currentUser.token).then(function(res) {
+      try {
+        if (!res.success) { list.innerHTML = `<div style="text-align:center; color:red; padding:15px;">불러오기 실패: ${escapeHtml(res.message)}</div>`; return; }
+        leagueEventsCache = res.list;
+        if (leagueEventsCache.length === 0) { list.innerHTML = `<div style="text-align:center; color:#999; padding:15px;">생성된 종목이 없습니다. 위에서 새로 만들어보세요.</div>`; return; }
+        let html = `<div style="overflow-x:auto;"><table style="width:100%; border-collapse:collapse; text-align:center; font-size:0.9em;"><thead><tr style="background:#ede7f6; border-bottom:2px solid #ccc;"><th style="padding:8px;">종목</th><th style="padding:8px;">형식</th><th style="padding:8px;">참가방식</th><th style="padding:8px;">대상</th><th style="padding:8px;">기간</th><th style="padding:8px;">상태</th><th style="padding:8px;">관리</th></tr></thead><tbody>`;
+        leagueEventsCache.forEach(ev => {
+          html += `<tr style="border-bottom:1px solid #eee; ${ev.status === 'CANCELLED' ? 'opacity:0.5;' : ''}"><td style="padding:8px; font-weight:bold;">${escapeHtml(ev.sportName)}</td><td style="padding:8px;">${leagueFormatLabel(ev.format)}</td><td style="padding:8px;">${leagueJoinLabel(ev.joinMode)}</td><td style="padding:8px;">${leagueGradeLabel(ev.targetGrade)}</td><td style="padding:8px; font-size:0.85em;">${escapeHtml(ev.startDate)}~${escapeHtml(ev.endDate)}</td><td style="padding:8px;">${ev.status === 'CANCELLED' ? '비공개' : '공개중'}</td><td style="padding:8px;"><button class="btn-small" style="background:#5e35b1;" onclick="leagueSelectEventAdmin('${ev.id}')">관리</button></td></tr>`;
+        });
+        html += `</tbody></table></div>`;
+        list.innerHTML = html;
+      } catch (renderErr) { list.innerHTML = `<div style="text-align:center; color:red; padding:15px;">화면 표시 중 오류: ${escapeHtml(renderErr.message)}</div>`; }
+    }).catch(function(err) { list.innerHTML = `<div style="text-align:center; color:red; padding:15px;">불러오지 못했습니다: ${escapeHtml(err && err.message ? err.message : err)}</div>`; });
+  }
+
+  function leagueCreateEvent() {
+    const sportSel = document.getElementById('league-new-sport-select').value;
+    const sportName = sportSel === '직접입력' ? document.getElementById('league-new-sport-custom').value.trim() : sportSel;
+    const format = document.getElementById('league-new-format').value;
+    const joinMode = document.getElementById('league-new-joinmode').value;
+    const targetGrade = document.getElementById('league-new-grade').value;
+    const startDate = document.getElementById('league-new-start').value;
+    const endDate = document.getElementById('league-new-end').value;
+    if (!sportName) { showAlert('종목명을 입력하세요.'); return; }
+    gsRun('createLeagueEvent', sportName, format, joinMode, targetGrade, startDate, endDate, currentUser.token).then(function(res) {
+      showAlert(res.message);
+      if (res.success) loadLeagueAdmin();
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // 관리자 - 종목 상세관리 (수정/팀/대진/일정메모)
+  // -------------------------------------------------------------------------
+  function leagueSelectEventAdmin(eventId) {
+    leagueAdminSelectedEventId = eventId;
+    const ev = leagueEventsCache.find(e => e.id === eventId);
+    if (!ev) return;
+    const detail = document.getElementById('league-admin-detail');
+    detail.innerHTML = `<div class="card" style="border-top:4px solid #5e35b1;">
+      <h4 style="margin-top:0; color:#4527a0;">🛠️ ${escapeHtml(ev.sportName)} 상세관리</h4>
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap:10px; background:#f0f2f5; padding:15px; border-radius:8px; margin-bottom:15px;">
+        <div><label style="font-size:0.8em; color:#666;">종목명</label><input type="text" id="league-edit-sport" class="input-field" style="margin:0;" value="${escapeHtml(ev.sportName)}"></div>
+        <div><label style="font-size:0.8em; color:#666;">형식</label><select id="league-edit-format" class="input-field" style="margin:0;"><option value="TOURNAMENT" ${ev.format === 'TOURNAMENT' ? 'selected' : ''}>토너먼트</option><option value="LEAGUE" ${ev.format === 'LEAGUE' ? 'selected' : ''}>리그전</option></select></div>
+        <div><label style="font-size:0.8em; color:#666;">참가방식</label><select id="league-edit-joinmode" class="input-field" style="margin:0;"><option value="CLASS" ${ev.joinMode === 'CLASS' ? 'selected' : ''}>반별 참가</option><option value="REGISTRATION" ${ev.joinMode === 'REGISTRATION' ? 'selected' : ''}>지원자 모집</option></select></div>
+        <div><label style="font-size:0.8em; color:#666;">대상학년</label><select id="league-edit-grade" class="input-field" style="margin:0;"><option value="BOTH" ${ev.targetGrade === 'BOTH' ? 'selected' : ''}>1·2학년 전체</option><option value="1" ${ev.targetGrade === '1' ? 'selected' : ''}>1학년만</option><option value="2" ${ev.targetGrade === '2' ? 'selected' : ''}>2학년만</option></select></div>
+        <div><label style="font-size:0.8em; color:#666;">시작일</label><input type="date" id="league-edit-start" class="input-field" style="margin:0;" value="${escapeHtml(ev.startDate)}" onchange="leagueSyncEndDateMin('league-edit')"></div>
+        <div><label style="font-size:0.8em; color:#666;">종료일</label><input type="date" id="league-edit-end" class="input-field" style="margin:0;" value="${escapeHtml(ev.endDate)}" min="${escapeHtml(ev.startDate)}"></div>
+      </div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:20px;">
+        <button class="btn-primary" style="flex:1; min-width:120px; background:#5e35b1;" onclick="leagueSaveEventEdit()">💾 정보 저장</button>
+        <button class="btn-primary" style="flex:1; min-width:120px; background:#999;" onclick="leagueCancelEventNow()">🙈 비공개(취소)</button>
+        <button class="btn-primary" style="flex:1; min-width:120px; background:#fff; color:#d32f2f; border:1px solid #d32f2f;" onclick="leagueDeleteEventNow()">🗑️ 완전 삭제</button>
+      </div>
+
+      <h4 style="color:#4527a0; margin-bottom:8px;">👥 참가팀 관리</h4>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+        <input type="text" id="league-team-name" class="input-field" placeholder="팀명 (예: 1반, 드림팀)" style="flex:2; min-width:120px; margin:0;">
+        <input type="text" id="league-team-note" class="input-field" placeholder="비고(명단 등, 선택)" style="flex:2; min-width:120px; margin:0;">
+        <button class="btn-small" style="flex:1; min-width:90px; background:#5e35b1;" onclick="leagueAddTeam()">팀 추가</button>
+      </div>
+      <div style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
+        <input type="number" id="league-class-count" class="input-field" value="8" min="1" style="max-width:80px; margin:0;">
+        <button class="btn-small" style="background:#7e57c2;" onclick="leagueAddClassTeams()">반별 팀 일괄 생성 (1~n반)</button>
+      </div>
+      <div id="league-team-list" style="margin-bottom:20px;"></div>
+
+      <h4 style="color:#4527a0; margin-bottom:8px;">⚔️ 대진 관리</h4>
+      <button class="btn-primary" style="background:#ff9800; margin-bottom:12px;" onclick="leagueGenerateMatches()">🎲 등록된 팀으로 랜덤 대진 편성</button>
+      <div id="league-match-list" style="margin-bottom:20px;"></div>
+
+      <h4 style="color:#4527a0; margin-bottom:8px;">📌 날짜별 일정메모</h4>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+        <input type="date" id="league-note-date" class="input-field" style="flex:1; min-width:130px; margin:0;">
+        <input type="text" id="league-note-content" class="input-field" placeholder="예: 개회식, 우천 시 실내 변경 안내 등" style="flex:2; min-width:150px; margin:0;">
+        <button class="btn-small" style="flex:1; min-width:90px; background:#5e35b1;" onclick="leagueAddNote()">메모 추가</button>
+      </div>
+      <div id="league-note-list"></div>
+    </div>`;
+    leagueLoadTeamsAdmin(eventId);
+    leagueLoadMatchesAdmin(eventId);
+    leagueLoadNotesAdmin(eventId);
+  }
+
+  function leagueSaveEventEdit() {
+    const id = leagueAdminSelectedEventId; if (!id) return;
+    const sportName = document.getElementById('league-edit-sport').value.trim();
+    const format = document.getElementById('league-edit-format').value;
+    const joinMode = document.getElementById('league-edit-joinmode').value;
+    const targetGrade = document.getElementById('league-edit-grade').value;
+    const startDate = document.getElementById('league-edit-start').value;
+    const endDate = document.getElementById('league-edit-end').value;
+    gsRun('updateLeagueEvent', id, sportName, format, joinMode, targetGrade, startDate, endDate, currentUser.token).then(function(res) { showAlert(res.message); if (res.success) loadLeagueAdmin(); });
+  }
+
+  function leagueCancelEventNow() {
+    const id = leagueAdminSelectedEventId; if (!id) return;
+    showConfirm('이 종목을 비공개 처리하시겠습니까?<br>학생 화면에서 더 이상 보이지 않게 됩니다.', function() {
+      gsRun('cancelLeagueEvent', id, currentUser.token).then(function(res) { showAlert(res.message); if (res.success) loadLeagueAdmin(); });
+    });
+  }
+
+  function leagueDeleteEventNow() {
+    const id = leagueAdminSelectedEventId; if (!id) return;
+    showConfirm('⚠️ 이 종목과 팀·대진·일정메모를 전부 완전히 삭제하시겠습니까?<br>되돌릴 수 없습니다.', function() {
+      gsRun('deleteLeagueEvent', id, currentUser.token).then(function(res) {
+        showAlert(res.message);
+        if (res.success) { document.getElementById('league-admin-detail').innerHTML = ''; loadLeagueAdmin(); }
+      });
+    });
+  }
+
+  function leagueLoadTeamsAdmin(eventId) {
+    const el = document.getElementById('league-team-list');
+    el.innerHTML = `<div style="text-align:center; color:#999; padding:10px;">불러오는 중입니다...</div>`;
+    gsRun('getLeagueTeams', eventId, currentUser.token).then(function(res) {
+      if (!res.success || res.list.length === 0) { el.innerHTML = `<div style="color:#999; text-align:center; padding:10px;">등록된 팀이 없습니다.</div>`; return; }
+      let html = `<div style="display:flex; flex-wrap:wrap; gap:8px;">`;
+      res.list.forEach(t => { html += `<div style="background:#ede7f6; border-radius:20px; padding:6px 14px; font-size:0.9em; display:flex; align-items:center; gap:6px;"><span style="font-weight:bold; color:#4527a0;">${escapeHtml(t.name)}</span><button onclick="leagueRemoveTeam('${escapeHtml(t.id)}')" style="border:none; background:none; color:#d32f2f; cursor:pointer; font-weight:bold;">✕</button></div>`; });
+      html += `</div>`;
+      el.innerHTML = html;
+    });
+  }
+
+  function leagueAddTeam() {
+    const eventId = leagueAdminSelectedEventId; if (!eventId) return;
+    const name = document.getElementById('league-team-name').value.trim();
+    const note = document.getElementById('league-team-note').value.trim();
+    if (!name) { showAlert('팀명을 입력하세요.'); return; }
+    gsRun('addLeagueTeam', eventId, name, note, currentUser.token).then(function(res) {
+      showAlert(res.message);
+      if (res.success) { document.getElementById('league-team-name').value = ''; document.getElementById('league-team-note').value = ''; leagueLoadTeamsAdmin(eventId); }
+    });
+  }
+
+  function leagueAddClassTeams() {
+    const eventId = leagueAdminSelectedEventId; if (!eventId) return;
+    const n = document.getElementById('league-class-count').value;
+    gsRun('addLeagueClassTeams', eventId, n, currentUser.token).then(function(res) { showAlert(res.message); if (res.success) leagueLoadTeamsAdmin(eventId); });
+  }
+
+  function leagueRemoveTeam(teamId) {
+    const eventId = leagueAdminSelectedEventId; if (!eventId) return;
+    gsRun('removeLeagueTeam', eventId, teamId, currentUser.token).then(function(res) { if (res.success) leagueLoadTeamsAdmin(eventId); else showAlert(res.message); });
+  }
+
+  function leagueLoadMatchesAdmin(eventId) {
+    const el = document.getElementById('league-match-list');
+    el.innerHTML = `<div style="text-align:center; color:#999; padding:10px;">불러오는 중입니다...</div>`;
+    gsRun('getLeagueMatches', eventId, currentUser.token).then(function(res) {
+      if (!res.success || res.list.length === 0) { el.innerHTML = `<div style="color:#999; text-align:center; padding:10px;">편성된 대진이 없습니다.</div>`; return; }
+      let html = `<div style="overflow-x:auto;"><table style="width:100%; border-collapse:collapse; text-align:center; font-size:0.88em;"><thead><tr style="background:#ede7f6;"><th style="padding:6px;">회차</th><th style="padding:6px;">대진</th><th style="padding:6px;">날짜</th><th style="padding:6px;">장소</th><th style="padding:6px;">결과</th><th style="padding:6px;">관리</th></tr></thead><tbody>`;
+      res.list.forEach(mt => {
+        html += `<tr style="border-bottom:1px solid #eee;"><td style="padding:6px;">${escapeHtml(mt.round)}</td><td style="padding:6px; font-weight:bold;">${escapeHtml(mt.teamA)} ${mt.teamB ? 'vs ' + escapeHtml(mt.teamB) : '(부전승)'}</td><td style="padding:4px;"><input type="date" class="input-field" style="margin:0; padding:6px; font-size:0.85em;" id="league-match-date-${mt.id}" value="${escapeHtml(mt.scheduledDate)}"></td><td style="padding:4px;"><input type="text" class="input-field" style="margin:0; padding:6px; font-size:0.85em;" id="league-match-place-${mt.id}" value="${escapeHtml(mt.place)}" placeholder="장소"></td><td style="padding:4px;"><input type="text" class="input-field" style="margin:0; padding:6px; font-size:0.85em;" id="league-match-result-${mt.id}" value="${escapeHtml(mt.result)}" placeholder="예: 3:1 승"></td><td style="padding:6px; white-space:nowrap;"><button class="btn-small" style="background:#5e35b1; padding:6px 10px; font-size:0.8em;" onclick="leagueSaveMatch('${eventId}', '${escapeHtml(mt.id)}')">저장</button> <button class="btn-small" style="background:#d32f2f; padding:6px 10px; font-size:0.8em;" onclick="leagueRemoveMatch('${eventId}', '${escapeHtml(mt.id)}')">삭제</button></td></tr>`;
+      });
+      html += `</tbody></table></div>`;
+      el.innerHTML = html;
+    });
+  }
+
+  function leagueGenerateMatches() {
+    const eventId = leagueAdminSelectedEventId; if (!eventId) return;
+    showConfirm('등록된 팀으로 대진을 랜덤 편성하시겠습니까?<br>기존에 편성된 대진은 모두 삭제되고 새로 만들어집니다.', function() {
+      gsRun('generateLeagueMatches', eventId, currentUser.token).then(function(res) { showAlert(res.message); if (res.success) leagueLoadMatchesAdmin(eventId); });
+    });
+  }
+
+  function leagueSaveMatch(eventId, matchId) {
+    const scheduledDate = document.getElementById(`league-match-date-${matchId}`).value;
+    const place = document.getElementById(`league-match-place-${matchId}`).value.trim();
+    const result = document.getElementById(`league-match-result-${matchId}`).value.trim();
+    gsRun('updateLeagueMatch', eventId, matchId, scheduledDate, place, result, currentUser.token).then(function(res) { showAlert(res.message); });
+  }
+
+  function leagueRemoveMatch(eventId, matchId) {
+    showConfirm('이 대진을 삭제하시겠습니까?', function() {
+      gsRun('removeLeagueMatch', eventId, matchId, currentUser.token).then(function(res) { showAlert(res.message); if (res.success) leagueLoadMatchesAdmin(eventId); });
+    });
+  }
+
+  function leagueLoadNotesAdmin(eventId) {
+    const el = document.getElementById('league-note-list');
+    el.innerHTML = `<div style="text-align:center; color:#999; padding:10px;">불러오는 중입니다...</div>`;
+    gsRun('getLeagueCalendar', eventId, currentUser.token).then(function(res) {
+      if (!res.success) { el.innerHTML = ''; return; }
+      const notes = [];
+      Object.keys(res.byDate).forEach(date => { res.byDate[date].notes.forEach(n => notes.push({ date: date, id: n.id, content: n.content })); });
+      if (notes.length === 0) { el.innerHTML = `<div style="color:#999; text-align:center; padding:10px;">등록된 일정메모가 없습니다.</div>`; return; }
+      notes.sort((a, b) => new Date(a.date) - new Date(b.date));
+      let html = '';
+      notes.forEach(n => { html += `<div style="display:flex; justify-content:space-between; align-items:center; background:#f5f3fb; border-radius:6px; padding:8px 12px; margin-bottom:6px; font-size:0.9em;"><span><b>${escapeHtml(n.date)}</b> - ${escapeHtml(n.content)}</span><button class="btn-small" style="background:#d32f2f; padding:4px 10px; font-size:0.8em;" onclick="leagueRemoveNote('${escapeHtml(n.id)}')">삭제</button></div>`; });
+      el.innerHTML = html;
+    });
+  }
+
+  function leagueAddNote() {
+    const eventId = leagueAdminSelectedEventId; if (!eventId) return;
+    const date = document.getElementById('league-note-date').value;
+    const content = document.getElementById('league-note-content').value.trim();
+    if (!date || !content) { showAlert('날짜와 내용을 모두 입력하세요.'); return; }
+    gsRun('addLeagueDayNote', eventId, date, content, currentUser.token).then(function(res) {
+      showAlert(res.message);
+      if (res.success) { document.getElementById('league-note-content').value = ''; leagueLoadNotesAdmin(eventId); }
+    });
+  }
+
+  function leagueRemoveNote(noteId) {
+    const eventId = leagueAdminSelectedEventId; if (!eventId) return;
+    gsRun('removeLeagueDayNote', eventId, noteId, currentUser.token).then(function(res) { showAlert(res.message); if (res.success) leagueLoadNotesAdmin(eventId); });
+  }
+</script>

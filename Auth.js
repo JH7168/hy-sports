@@ -82,6 +82,36 @@ function getSecretCode(role) {
 }
 
 // ==========================================================
+// 3학년 졸업일 설정 (졸업식 이후 3학년 로그인 차단)
+// ==========================================================
+function getGraduationDateRaw_() {
+  return PropertiesService.getScriptProperties().getProperty('GRADUATION_DATE') || '';
+}
+
+function isPastGraduationDate_() {
+  const raw = getGraduationDateRaw_();
+  if (!raw) return false;
+  const grad = new Date(raw + 'T23:59:59'); // 졸업식 당일까지는 이용 허용, 다음날부터 차단
+  return new Date() > grad;
+}
+
+function getGraduationDate(token) {
+  try {
+    requirePeTeacher(token);
+    return { success: true, date: getGraduationDateRaw_() };
+  } catch (e) { return { success: false, message: e.message }; }
+}
+
+function updateGraduationDate(date, token) {
+  try {
+    requirePeTeacher(token);
+    if (!date) return { success: false, message: "날짜를 입력하세요." };
+    PropertiesService.getScriptProperties().setProperty('GRADUATION_DATE', date);
+    return { success: true, message: "3학년 졸업일이 " + date + "로 설정되었습니다." };
+  } catch (e) { return { success: false, message: e.message }; }
+}
+
+// ==========================================================
 // 인증 및 회원가입 로직
 // ==========================================================
 function verifyLogin(role, userId, userPw) {
@@ -98,6 +128,9 @@ function verifyLogin(role, userId, userPw) {
         if (data[i][0] && data[i][0].toString().trim() === inputId) {
           const stored = data[i][2];
           if (stored && verifyPassword(inputPw, stored)) {
+            if (inputId.charAt(0) === '3' && isPastGraduationDate_()) {
+              return { success: false, message: "3학년 졸업식(" + getGraduationDateRaw_() + ")이 지나 더 이상 이용할 수 없습니다. 그동안 이용해주셔서 감사합니다." };
+            }
             if (stored.toString().indexOf('$') === -1) {
               sheet.getRange(i + 1, 3).setNumberFormat("@").setValue(hashPassword(inputPw)); // 평문 -> 해시 자동 전환
             }

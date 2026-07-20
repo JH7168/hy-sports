@@ -129,6 +129,7 @@
     const targetContent = document.getElementById('content-' + tabName); if(targetContent) targetContent.classList.remove('hidden');
     if (parentId) { const p = document.getElementById(parentId); if (p) p.classList.add('active'); } else { const t = document.getElementById('tab-' + tabName); if(t) t.classList.add('active'); }
     if (tabName === 'afterschool-small') loadPhysPrepStudentView();
+    if (tabName === 'friendly') loadLeagueStudentView();
     if (tabName === 'lunch-futsal') loadFacilityStudentView('FUTSAL');
     if (tabName === 'lunch-gym') loadFacilityStudentView('GYM');
     if (tabName === 'lunch-field') loadFacilityStudentView('FIELD');
@@ -144,31 +145,30 @@
   function closePETeacherView() { document.getElementById('pe-main-view')?.classList.add('hidden'); document.getElementById('main-view')?.classList.remove('hidden'); switchTab('home'); }
 
   function switchPETab(peTabName) {
-    const peTabs = ['pe-home', 'pe-inventory-status', 'pe-purchase-list', 'pe-physprep-roster', 'pe-physprep-events', 'pe-physprep-input', 'pe-physprep-ranking', 'pe-paps-manage', 'pe-sports-manage', 'pe-facility-futsal', 'pe-facility-gym', 'pe-facility-field', 'pe-facility-violations', 'pe-sportsclub-manage', 'pe-board-manage', 'pe-suggestion-manage'];
+    const peTabs = ['pe-home', 'pe-inventory-status', 'pe-purchase-list', 'pe-afterschool-main', 'pe-afterschool-small', 'pe-paps-manage', 'pe-sports-manage', 'pe-league-manage', 'pe-facility-futsal', 'pe-facility-gym', 'pe-facility-field', 'pe-facility-violations', 'pe-sportsclub-manage', 'pe-suggestion-manage'];
     peTabs.forEach(t => { const c = document.getElementById('content-' + t); if(c) c.classList.add('hidden'); });
 
-    const mainBtns = ['tab-pe-home', 'tab-pe-inventory-manage', 'tab-pe-physprep-manage', 'tab-pe-paps-manage', 'tab-pe-sports-manage', 'tab-pe-lunch-manage', 'tab-pe-sportsclub-manage', 'tab-pe-board-manage', 'tab-pe-suggestion-manage'];
+    const mainBtns = ['tab-pe-home', 'tab-pe-inventory-manage', 'tab-pe-afterschool-manage', 'tab-pe-paps-manage', 'tab-pe-sports-manage', 'tab-pe-league-manage', 'tab-pe-lunch-manage', 'tab-pe-sportsclub-manage', 'tab-pe-suggestion-manage'];
     mainBtns.forEach(b => { const btn = document.getElementById(b); if(btn) btn.classList.remove('active'); });
 
     const targetC = document.getElementById('content-' + peTabName); if(targetC) targetC.classList.remove('hidden');
 
     if(peTabName === 'pe-inventory-status' || peTabName === 'pe-purchase-list') {
       document.getElementById('tab-pe-inventory-manage')?.classList.add('active');
-    } else if(peTabName.indexOf('pe-physprep-') === 0) {
-      document.getElementById('tab-pe-physprep-manage')?.classList.add('active');
+    } else if(peTabName.indexOf('pe-afterschool-') === 0) {
+      document.getElementById('tab-pe-afterschool-manage')?.classList.add('active');
     } else if(peTabName.indexOf('pe-facility-') === 0) {
       document.getElementById('tab-pe-lunch-manage')?.classList.add('active');
     } else {
       document.getElementById('tab-' + peTabName)?.classList.add('active');
     }
 
+    if (peTabName === 'pe-home') loadGraduationDate();
+    if (peTabName === 'pe-league-manage') loadLeagueAdmin();
     if (peTabName === 'pe-paps-manage') loadAdminGradeStats();
     if (peTabName === 'pe-inventory-status') loadInventory();
     if (peTabName === 'pe-purchase-list') loadPurchaseReqs();
-    if (peTabName === 'pe-physprep-roster') loadPhysPrepRoster();
-    if (peTabName === 'pe-physprep-events') loadPhysPrepEventsAdmin();
-    if (peTabName === 'pe-physprep-input') loadPhysPrepEntryForm();
-    if (peTabName === 'pe-physprep-ranking') loadPhysPrepRankingAdmin();
+    if (peTabName === 'pe-afterschool-small') { loadPhysPrepRoster(); loadPhysPrepEventsAdmin(); loadPhysPrepEntryForm(); loadPhysPrepRankingAdmin(); }
     if (peTabName === 'pe-facility-futsal') openFacilityAdminTab('FUTSAL');
     if (peTabName === 'pe-facility-gym') openFacilityAdminTab('GYM');
     if (peTabName === 'pe-facility-field') openFacilityAdminTab('FIELD');
@@ -244,6 +244,9 @@
         // 건의함 관리 메뉴는 체육교사 중 아이디가 정확히 "박정환"인 계정에만 노출된다.
         if (res.role === '체육교사' && res.id === '박정환') document.getElementById('tab-pe-suggestion-manage')?.classList.remove('hidden');
         else document.getElementById('tab-pe-suggestion-manage')?.classList.add('hidden');
+        // 친사리그는 1·2학년만 참여 대상이라 3학년 학생에게는 메뉴 자체를 숨긴다.
+        if (res.role === '학생' && res.id.toString().charAt(0) === '3') document.getElementById('tab-friendly')?.classList.add('hidden');
+        else document.getElementById('tab-friendly')?.classList.remove('hidden');
         loadBoard(); loadPaps(); switchTab('home');
       } else { const lmsg = document.getElementById('login-msg'); if(lmsg) lmsg.innerText = res.message; }
     }).catch(function() { if(loginBtn) { loginBtn.innerText = "로그인"; loginBtn.disabled = false; } });
@@ -255,5 +258,21 @@
     document.getElementById('tab-pe-teacher')?.classList.add('hidden');
     document.getElementById('tab-pe-suggestion-manage')?.classList.add('hidden');
     toggleView('login-view'); switchTab('home');
+  }
+
+  // =========================================================================
+  // 3학년 졸업일 설정
+  // =========================================================================
+  function loadGraduationDate() {
+    gsRun('getGraduationDate', currentUser.token).then(function(res) {
+      const input = document.getElementById('graduation-date-input');
+      if (input && res.success && res.date) input.value = res.date;
+    });
+  }
+
+  function saveGraduationDate() {
+    const date = document.getElementById('graduation-date-input').value;
+    if (!date) { showAlert('날짜를 선택하세요.'); return; }
+    gsRun('updateGraduationDate', date, currentUser.token).then(function(res) { showAlert(res.message); });
   }
 </script>

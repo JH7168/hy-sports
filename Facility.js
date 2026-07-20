@@ -65,8 +65,8 @@ function getFacilityViolationSheet_(facility) { return SpreadsheetApp.getActiveS
 
 function facilitySlotRowToObj_(row, rowIndex) {
   return {
-    rowIndex: rowIndex, id: row[0], date: row[1], mode: row[2], grade: row[3],
-    appStart: row[4], appEnd: row[5], announceAt: row[6], teamCount: row[7], status: row[8],
+    rowIndex: rowIndex, id: row[0], date: toDateStr_(row[1]), mode: row[2], grade: row[3],
+    appStart: toDateTimeStr_(row[4]), appEnd: toDateTimeStr_(row[5]), announceAt: toDateTimeStr_(row[6]), teamCount: row[7], status: row[8],
     resultJson: row[9], createdAt: row[10], createdBy: row[11]
   };
 }
@@ -238,7 +238,7 @@ function getFacilitySlotsAdmin(facility, token) {
     for (let i = 1; i < appData.length; i++) { const sid = appData[i][1]; countMap[sid] = (countMap[sid] || 0) + 1; }
     slots.forEach(s => { s.appCount = countMap[s.id] || 0; });
     slots.sort((a, b) => new Date(b.date) - new Date(a.date));
-    return { success: true, list: slots };
+    return sanitizeDates_({ success: true, list: slots });
   } catch (e) { return { success: false, message: e.message, list: [] }; }
 }
 
@@ -256,7 +256,7 @@ function getFacilityApplicationsAdmin(facility, slotId, token) {
         list.push({ id: appId, teamName: appData[i][2], leaderId: appData[i][3], leaderName: appData[i][4], leaderRole: appData[i][5], appliedAt: appData[i][6], selected: appData[i][7] === true, members: members });
       }
     }
-    return { success: true, list: list };
+    return sanitizeDates_({ success: true, list: list });
   } catch (e) { return { success: false, message: e.message, list: [] }; }
 }
 
@@ -436,7 +436,7 @@ function getFacilityBoard(facility, token) {
       }
     });
 
-    return {
+    return sanitizeDates_({
       success: true,
       eligibleOpenSlots: eligibleOpenSlots,
       upcomingSlots: upcomingSlots,
@@ -445,7 +445,7 @@ function getFacilityBoard(facility, token) {
       pendingInvites: pendingInvites,
       resultDetails: resultDetails,
       isManager: isFacilityManager_(facility, session.id)
-    };
+    });
   } catch (e) { return { success: false, message: e.message }; }
 }
 
@@ -499,8 +499,8 @@ function getFacilityManagers(facility, token) {
     requirePeTeacher(token);
     const data = getFacilityManagerSheet_(facility).getDataRange().getValues();
     const list = [];
-    for (let i = 1; i < data.length; i++) { if (data[i][0]) list.push({ id: data[i][0].toString(), name: data[i][1], grade: data[i][2], regDate: data[i][3] }); }
-    return { success: true, list: list };
+    for (let i = 1; i < data.length; i++) { if (data[i][0]) list.push({ id: data[i][0].toString(), name: data[i][1], grade: data[i][2], regDate: toDateStr_(data[i][3]) }); }
+    return sanitizeDates_({ success: true, list: list });
   } catch (e) { return { success: false, message: e.message, list: [] }; }
 }
 
@@ -534,7 +534,7 @@ function removeFacilityViolation(facility, recordId, token) {
 }
 
 function facilityViolationRowToObj_(row) {
-  return { id: row[0], studentId: row[1], name: row[2], reason: row[3], violationDate: row[4], registeredAt: row[5], recorderName: row[7] };
+  return { id: row[0], studentId: row[1], name: row[2], reason: row[3], violationDate: toDateStr_(row[4]), registeredAt: toDateTimeStr_(row[5]), recorderName: row[7] };
 }
 
 function getFacilityViolations(facility, token) {
@@ -549,7 +549,7 @@ function getFacilityViolations(facility, token) {
       countMap[data[i][1]] = (countMap[data[i][1]] || 0) + 1;
     }
     list.reverse();
-    return { success: true, list: list, countMap: countMap };
+    return sanitizeDates_({ success: true, list: list, countMap: countMap });
   } catch (e) { return { success: false, message: e.message, list: [], countMap: {} }; }
 }
 
@@ -571,7 +571,7 @@ function getAllFacilityViolations(token) {
       }
     });
     list.sort((a, b) => new Date(b.violationDate) - new Date(a.violationDate));
-    return { success: true, list: list, countMap: countMap };
+    return sanitizeDates_({ success: true, list: list, countMap: countMap });
   } catch (e) { return { success: false, message: e.message, list: [], countMap: {} }; }
 }
 
