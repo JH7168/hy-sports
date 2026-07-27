@@ -29,21 +29,41 @@
 
   function papsLoadTarget() { if(papsTargetId) fetchAndRenderPaps(papsTargetId, 'paps-result-container', document.getElementById('paps-search-year').value); }
 
-  // 학생 PAPS 조회 화면 상단에 표시할 "우리 학년 TOP3"(BMI 제외, 동점이면 기록이 높은 학생 우선) 카드
+  // 학생 PAPS 조회 화면 맨 위에 표시할 "한영고 전체 랭킹"(전교 1~3학년 통합 TOP3) 카드.
+  // 다른 학년 학생도 섞여 나오므로 순위마다 학년+이름만 보여주고 기록/점수는 노출하지 않는다.
+  function renderPapsSchoolTop3Card(schoolTop3, year) {
+    if (!schoolTop3) return '';
+    const medals = ['🥇', '🥈', '🥉'];
+    function list(title, arr) {
+      const body = (!arr || arr.length === 0) ? `<div style="color:rgba(255,255,255,0.7); font-size:0.85em;">데이터 없음</div>` :
+        arr.map((r, idx) => `<div style="padding:3px 0; ${idx > 0 ? 'border-top:1px dashed rgba(255,255,255,0.25);' : ''} font-size:0.88em;">${medals[idx]} ${r.grade}학년 ${escapeHtml(r.name)}</div>`).join('');
+      return `<div style="background:rgba(255,255,255,0.12); border-radius:10px; padding:10px 12px;"><div style="font-weight:bold; margin-bottom:6px; font-size:0.9em;">${title}</div>${body}</div>`;
+    }
+    return `<div class="card" style="background:linear-gradient(135deg, #16305c 0%, #6a1b9a 100%); color:white; margin-bottom:25px; padding:20px;"><h3 style="margin:0 0 15px; text-align:center; font-size:1.15em;">🏫 ${year}학년도 [ 한영고 전체 랭킹 ]</h3><div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:10px;">${
+      list('🏆 종합점수', schoolTop3.total) +
+      list('🏃 심폐지구력', schoolTop3.cardio) +
+      list('🤸 유연성', schoolTop3.flex) +
+      list('💪 근력·근지구력', schoolTop3.strength) +
+      list('⚡ 순발력', schoolTop3.power)
+    }</div></div>`;
+  }
+
+  // 학생 PAPS 조회 화면의 "우리 학년 TOP3"(BMI 제외, 동점이면 기록이 높은 학생 우선) 카드.
+  // 종합점수는 별도 원기록이 없으므로 점수를 보여주고, 나머지 종목은 기록만 보여준다(점수는 생략).
   function renderPapsTop3Card(top3, grade, year) {
     if (!top3) return '';
     const medals = ['🥇', '🥈', '🥉'];
-    function list(title, arr, unit) {
+    function list(title, arr, unit, showScore) {
       const body = (!arr || arr.length === 0) ? `<div style="color:rgba(255,255,255,0.7); font-size:0.85em;">데이터 없음</div>` :
-        arr.map((r, idx) => `<div style="display:flex; justify-content:space-between; gap:8px; padding:3px 0; ${idx > 0 ? 'border-top:1px dashed rgba(255,255,255,0.25);' : ''} font-size:0.88em;"><span>${medals[idx]} ${escapeHtml(r.name)}</span><span style="font-weight:bold; white-space:nowrap;">${(r.record !== null && r.record !== undefined && r.record !== '') ? escapeHtml(r.record.toString()) + unit + ' · ' : ''}${r.score}점</span></div>`).join('');
+        arr.map((r, idx) => `<div style="display:flex; justify-content:space-between; gap:8px; padding:3px 0; ${idx > 0 ? 'border-top:1px dashed rgba(255,255,255,0.25);' : ''} font-size:0.88em;"><span>${medals[idx]} ${escapeHtml(r.name)}</span><span style="font-weight:bold; white-space:nowrap;">${showScore ? r.score + '점' : escapeHtml((r.record !== null && r.record !== undefined ? r.record.toString() : '')) + unit}</span></div>`).join('');
       return `<div style="background:rgba(255,255,255,0.12); border-radius:10px; padding:10px 12px;"><div style="font-weight:bold; margin-bottom:6px; font-size:0.9em;">${title}</div>${body}</div>`;
     }
     return `<div class="card" style="background:linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); color:white; margin-bottom:25px; padding:20px;"><h3 style="margin:0 0 15px; text-align:center; font-size:1.15em;">🏅 ${year}학년도 [ ${grade}학년 TOP3 ]</h3><div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:10px;">${
-      list('🏆 종합점수', top3.total, '') +
-      list('🏃 심폐지구력', top3.cardio, '회') +
-      list('🤸 유연성', top3.flex, 'cm') +
-      list('💪 근력·근지구력', top3.strength, '회') +
-      list('⚡ 순발력', top3.power, 'cm')
+      list('🏆 종합점수', top3.total, '', true) +
+      list('🏃 심폐지구력', top3.cardio, '회', false) +
+      list('🤸 유연성', top3.flex, 'cm', false) +
+      list('💪 근력·근지구력', top3.strength, '회', false) +
+      list('⚡ 순발력', top3.power, 'cm', false)
     }</div></div>`;
   }
 
@@ -53,8 +73,11 @@
     gsRun('getStudentPapsDetail', studentId, year, currentUser.token).then(function(res) {
       if(!res.success) { document.getElementById(containerId).innerHTML = `<div style='text-align:center; color:red; font-weight:bold; padding:20px;'>${escapeHtml(res.message)}</div>`; return; }
       const d = res.papsData, st = d.stats, rk = d.classRanks;
-      let html = renderPapsTop3Card(d.top3, d.targetGrade, year);
-      html += `<div class="card" style="border-top: 6px solid #ff9800; background: #fffdf7; margin-bottom: 25px; padding: 20px;"><h3 style="margin-top: 0; margin-bottom: 15px; color: #ff9800; text-align: center; font-size: 1.25em; letter-spacing: -0.5px;">🏆 ${year}학년도 [ 우리 반 종목별 순위 ]</h3><p style="text-align:center; font-size:0.88em; color:#666; margin-top:-10px; margin-bottom:15px;">(우리 <b>${d.targetClass}반</b>의 점수 평균 순위)</p><div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; text-align: center;"><div style="background: #fff; padding: 10px 5px; border-radius: 8px; border: 1px solid #ffe0b2;"><div style="font-size: 0.8em; color: #777; font-weight: bold;">종합점수 순위</div><div style="font-size: clamp(1rem, 4vw, 1.3em); font-weight: bold; color: #e65100; margin-top: 5px;">${rk.total.rank}등 <span style="font-size:0.65em; color:#aaa; font-weight:normal;">/ ${rk.total.totalClasses}반</span></div></div><div style="background: #fff; padding: 10px 5px; border-radius: 8px; border: 1px solid #ffe0b2;"><div style="font-size: 0.8em; color: #4caf50; font-weight: bold;">심폐지구력</div><div style="font-size: clamp(1rem, 4vw, 1.3em); font-weight: bold; color: #1b5e20; margin-top: 5px;">${rk.cardio.rank}등 <span style="font-size:0.65em; color:#aaa; font-weight:normal;">/ ${rk.cardio.totalClasses}반</span></div></div><div style="background: #fff; padding: 10px 5px; border-radius: 8px; border: 1px solid #ffe0b2;"><div style="font-size: 0.8em; color: #e91e63; font-weight: bold;">유연성</div><div style="font-size: clamp(1rem, 4vw, 1.3em); font-weight: bold; color: #880e4f; margin-top: 5px;">${rk.flex.rank}등 <span style="font-size:0.65em; color:#aaa; font-weight:normal;">/ ${rk.flex.totalClasses}반</span></div></div><div style="background: #fff; padding: 10px 5px; border-radius: 8px; border: 1px solid #ffe0b2; margin-top: 5px;"><div style="font-size: 0.8em; color: #ff9800; font-weight: bold;">근력·근지구력</div><div style="font-size: clamp(1rem, 4vw, 1.3em); font-weight: bold; color: #e65100; margin-top: 5px;">${rk.strength.rank}등 <span style="font-size:0.65em; color:#aaa; font-weight:normal;">/ ${rk.strength.totalClasses}반</span></div></div><div style="background: #fff; padding: 10px 5px; border-radius: 8px; border: 1px solid #ffe0b2; margin-top: 5px;"><div style="font-size: 0.8em; color: #2196f3; font-weight: bold;">순발력</div><div style="font-size: clamp(1rem, 4vw, 1.3em); font-weight: bold; color: #0d47a1; margin-top: 5px;">${rk.power.rank}등 <span style="font-size:0.65em; color:#aaa; font-weight:normal;">/ ${rk.power.totalClasses}반</span></div></div><div style="background: #fff; padding: 10px 5px; border-radius: 8px; border: 1px solid #ffe0b2; margin-top: 5px;"><div style="font-size: 0.8em; color: #9c27b0; font-weight: bold;">비만(BMI)</div><div style="font-size: clamp(1rem, 4vw, 1.3em); font-weight: bold; color: #4a148c; margin-top: 5px;">${rk.bmi.rank}등 <span style="font-size:0.65em; color:#aaa; font-weight:normal;">/ ${rk.bmi.totalClasses}반</span></div></div></div></div>`;
+      let html = renderPapsSchoolTop3Card(d.schoolTop3, year);
+      html += renderPapsTop3Card(d.top3, d.targetGrade, year);
+      const classRankBoxes = [['🏆 종합점수', rk.total], ['🏃 심폐지구력', rk.cardio], ['🤸 유연성', rk.flex], ['💪 근력·근지구력', rk.strength], ['⚡ 순발력', rk.power], ['⚖️ 비만(BMI)', rk.bmi]]
+        .map(([label, r]) => `<div style="background:rgba(255,255,255,0.15); border-radius:10px; padding:12px 6px; text-align:center; min-width:95px; flex:1 0 auto;"><div style="font-size:0.75em; font-weight:bold; margin-bottom:6px;">${label}</div><div style="font-size:1.1em; font-weight:bold; white-space:nowrap;">${r.rank}등 <span style="font-size:0.7em; opacity:0.8; font-weight:normal;">/ ${r.totalClasses}반</span></div></div>`).join('');
+      html += `<div class="card" style="background:linear-gradient(135deg, #8a5a20 0%, #c9862f 100%); color:white; margin-bottom:25px; padding:20px;"><h3 style="margin:0 0 15px; text-align:center; font-size:1.15em;">🏆 ${year}학년도 [ 우리 반 종목별 순위 ]</h3><div style="display:flex; gap:10px; overflow-x:auto; padding-bottom:4px;">${classRankBoxes}</div></div>`;
       html += `<div class="card" style="margin-bottom: 25px; text-align: center;"><h3 style="margin-top: 0; color: #1e3c72; border-bottom: 2px solid #1e3c72; padding-bottom: 5px;">🕸️ 나의 체력 밸런스 분석</h3><p style="font-size: 0.82em; color: #666; word-break:keep-all;">🔵내 점수 | 🟢반평균 점수 | 🟣학년평균 점수</p><div style="position: relative; max-width: 450px; margin: 0 auto;"><canvas id="papsRadarChart-${year}"></canvas></div></div>`;
       html += `<div style="background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); color:white; padding:22px; border-radius:12px; margin-bottom:20px; text-align:center; box-shadow: 0 4px 10px rgba(0,0,0,0.1);"><h3 style="margin:0; font-size:1.35em;">건강체력평가 종합점수</h3><div style="font-size:2.6em; font-weight:bold; margin:8px 0;">${d.totalScore}점</div><div style="display:inline-block; background:rgba(255,255,255,0.2); padding:4px 15px; border-radius:20px; font-weight:bold; margin-bottom:15px;">종합 ${d.totalGrade}등급</div><div style="background: rgba(0, 0, 0, 0.25); padding: 12px; border-radius: 8px; font-size: 0.93em; line-height: 1.6; text-align: left; max-width: 420px; margin: 0 auto; word-break: keep-all;">📢 <b>학년 평균 비교:</b> ${st.totalScore.school.avg}점 (전교 <b>${st.totalScore.school.rank}등</b> / ${st.totalSchoolStudents}명)<br>🏫 <b>반평균 비교:</b> ${st.totalScore.class.avg}점 (반 <b>${st.totalScore.class.rank}등</b> / ${st.totalClassStudents}명)</div></div>`;
       if (d.growthTrack) {

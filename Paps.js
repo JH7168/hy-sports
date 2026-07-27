@@ -206,22 +206,23 @@ function getStudentPapsDetail(studentId, year, token) {
     let bmiScoresSchool = []; let bmiScoresClass = []; let targetBmiScore = parseFloat(targetRow[17]);
     let totalSchoolStudents = 0; let totalClassStudents = 0;
     let classGroup = {}; let schoolScoreGroup = { cardio: [], flex: [], strength: [], power: [], bmi: [] };
-    let gradeRows = []; // 같은 학년 전체 TOP3 랭킹 계산용 (BMI 제외)
+    let schoolRows = []; // 전교생 대상 TOP3 랭킹 계산용 (BMI 제외)
 
     for (let i = 1; i < data.length; i++) {
       const row = data[i]; if (!row[0]) continue;
       const parsed = parseId(row[0]); if (!parsed) continue;
 
+      schoolRows.push({
+        grade: parsed.grade, name: row[1] ? row[1].toString().trim() : '',
+        totalScore: parseFloat(row[2]),
+        cardioRec: row[4], cardioScore: parseFloat(row[5]),
+        flexRec: row[7], flexScore: parseFloat(row[8]),
+        strengthRec: row[10], strengthScore: parseFloat(row[11]),
+        powerRec: row[13], powerScore: parseFloat(row[14])
+      });
+
       if (parsed.grade === targetParsed.grade) {
         totalSchoolStudents++;
-        gradeRows.push({
-          name: row[1] ? row[1].toString().trim() : '',
-          totalScore: parseFloat(row[2]),
-          cardioRec: row[4], cardioScore: parseFloat(row[5]),
-          flexRec: row[7], flexScore: parseFloat(row[8]),
-          strengthRec: row[10], strengthScore: parseFloat(row[11]),
-          powerRec: row[13], powerScore: parseFloat(row[14])
-        });
         const isSameClass = (parsed.cls === targetParsed.cls);
         if (isSameClass) totalClassStudents++;
 
@@ -275,13 +276,14 @@ function getStudentPapsDetail(studentId, year, token) {
     }
     let schoolScoreAvg = { cardio: calcAvg(schoolScoreGroup.cardio), flex: calcAvg(schoolScoreGroup.flex), strength: calcAvg(schoolScoreGroup.strength), power: calcAvg(schoolScoreGroup.power), bmi: calcAvg(schoolScoreGroup.bmi) };
 
-    // 같은 학년 TOP3 (BMI 제외). 점수(방향까지 반영된 0~20점) 기준, 동점이면 원기록이 높은 쪽을 우선한다.
+    // TOP3 (BMI 제외). 점수(방향까지 반영된 0~20점) 기준, 동점이면 원기록이 높은 쪽을 우선한다.
     function top3(rows, scoreKey, recKey) {
       return rows.slice().sort((a, b) => {
         if (b[scoreKey] !== a[scoreKey]) return b[scoreKey] - a[scoreKey];
         return recKey ? parseNum(b[recKey]) - parseNum(a[recKey]) : 0;
-      }).slice(0, 3).map((r, idx) => ({ rank: idx + 1, name: r.name, record: recKey ? r[recKey] : null, score: r[scoreKey] }));
+      }).slice(0, 3).map((r, idx) => ({ rank: idx + 1, grade: r.grade, name: r.name, record: recKey ? r[recKey] : null, score: r[scoreKey] }));
     }
+    const gradeRows = schoolRows.filter(r => r.grade === targetParsed.grade);
     const top3Rankings = {
       total: top3(gradeRows, 'totalScore', null),
       cardio: top3(gradeRows, 'cardioScore', 'cardioRec'),
@@ -289,10 +291,18 @@ function getStudentPapsDetail(studentId, year, token) {
       strength: top3(gradeRows, 'strengthScore', 'strengthRec'),
       power: top3(gradeRows, 'powerScore', 'powerRec')
     };
+    // 전교(1~3학년 통합) TOP3 - 순위 화면에는 학년+이름만 노출한다.
+    const schoolTop3Rankings = {
+      total: top3(schoolRows, 'totalScore', null),
+      cardio: top3(schoolRows, 'cardioScore', 'cardioRec'),
+      flex: top3(schoolRows, 'flexScore', 'flexRec'),
+      strength: top3(schoolRows, 'strengthScore', 'strengthRec'),
+      power: top3(schoolRows, 'powerScore', 'powerRec')
+    };
 
     const papsData = {
       totalScore: targetRow[2], totalGrade: targetRow[3], cardioRec: targetRow[4], cardioScore: targetRow[5], cardioGrade: targetRow[6], flexRec: targetRow[7], flexScore: targetRow[8], flexGrade: targetRow[9], strengthRec: targetRow[10], strengthScore: targetRow[11], strengthGrade: targetRow[12], powerRec: targetRow[13], powerScore: targetRow[14], powerGrade: targetRow[15], bmiRec: targetRow[16], bmiScore: targetRow[17], bmiGrade: targetRow[18],
-      targetClass: targetClsStr, targetGrade: targetParsed.grade, classRanks: classRanks, classScoreAvg: classScoreAvg, schoolScoreAvg: schoolScoreAvg, top3: top3Rankings,
+      targetClass: targetClsStr, targetGrade: targetParsed.grade, classRanks: classRanks, classScoreAvg: classScoreAvg, schoolScoreAvg: schoolScoreAvg, top3: top3Rankings, schoolTop3: schoolTop3Rankings,
       stats: {
         totalSchoolStudents: totalSchoolStudents, totalClassStudents: totalClassStudents,
         totalScore: { school: getStats(schoolData['totalScore'], parseFloat(targetRow[2])), class: getStats(classData['totalScore'], parseFloat(targetRow[2])) },
