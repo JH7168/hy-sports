@@ -6,6 +6,10 @@
   const SPORTSCLUB_KOR = { SOCCER: '축구부', BASKETBALL: '농구부', VOLLEYBALL: '배구부', BADMINTON: '배드민턴부' };
   let sportsClubEditingPostId = null;
 
+  // 주장 관리 패널의 반/번호 <select> 옵션 - 매번 새로 만들지 않도록 한 번만 조립해둔다.
+  const SPORTSCLUB_CAPTAIN_CLASS_OPTS = (function() { let s = '<option value="">반</option>'; for (let i = 1; i <= 8; i++) s += `<option value="${i}">${i}반</option>`; return s; })();
+  const SPORTSCLUB_CAPTAIN_NUM_OPTS = (function() { let s = '<option value="">번호</option>'; for (let i = 1; i <= 25; i++) s += `<option value="${i}">${i}번</option>`; return s; })();
+
   // -------------------------------------------------------------------------
   // 학생/교사 화면 - 부원 전용 자유게시판
   // -------------------------------------------------------------------------
@@ -21,7 +25,9 @@
     const container = document.getElementById(`${p}-container`);
     if (!res.success) { container.innerHTML = `<div class="card" style="text-align:center; color:#666;">${escapeHtml(res.message)}</div>`; return; }
 
-    let html = `<div class="card" style="border-top:5px solid #3949ab;">
+    let html = res.amICaptain ? sportsClubCaptainPanelHtml_(club) : '';
+
+    html += `<div class="card" style="border-top:5px solid #3949ab;">
       <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
         <h3 style="margin:0; color:#283593;">✍️ 새 글 쓰기</h3>
         <button type="button" class="btn-small" id="${p}-post-mode-btn" style="background:#5c6bc0; padding:7px 14px;" onclick="sportsClubToggleComposeMode('${club}')">📋 설문지 작성</button>
@@ -36,6 +42,10 @@
         <div style="flex:1; min-width:100px;"><label style="font-size:0.75em; color:#666;">마감 시간</label><input type="time" id="${p}-post-poll-deadline-time" class="input-field" style="margin:0;"></div>
       </div>
       <textarea id="${p}-post-content" class="input-field" placeholder="자유롭게 작성해보세요 (훈련 일지, 공지, 잡담 등)" style="height:90px; resize:vertical;"></textarea>
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px; flex-wrap:wrap;">
+        <label class="btn-small" style="background:#7986cb; padding:7px 14px; cursor:pointer; margin:0;">📎 첨부파일 선택(대회 홍보물 등)<input type="file" id="${p}-post-attach" accept="image/*,.hwp,.hwpx" style="display:none;" onchange="sportsClubAttachSelected('${club}')"></label>
+        <span id="${p}-post-attach-name" style="font-size:0.85em; color:#666;"></span>
+      </div>
       <button class="btn-primary" style="background:#3949ab;" onclick="sportsClubSubmitPost('${club}')">등록</button></div>`;
 
     html += `<div class="card" style="border-top:5px solid #3949ab;"><h3 style="margin-top:0; color:#283593;">📋 ${escapeHtml(SPORTSCLUB_KOR[club])} 게시판</h3>`;
@@ -44,8 +54,9 @@
     } else {
       res.list.forEach(post => {
         html += `<div id="${p}-post-${post.id}" style="border-bottom:1px solid #eee; padding:14px 0;">`;
-        html += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:6px;"><div style="font-weight:bold; color:#283593; font-size:1.05em;">${escapeHtml(post.title)}</div><div style="font-size:0.8em; color:#999;">${escapeHtml(post.authorName)} · ${escapeHtml(post.updatedAt)}</div></div>`;
-        html += `<div style="color:#444; white-space:pre-wrap; font-size:0.95em; line-height:1.5;">${escapeHtml(post.content)}</div>`;
+        html += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:6px;">${post.title ? `<div style="font-weight:bold; color:#283593; font-size:1.05em;">${escapeHtml(post.title)}</div>` : '<div></div>'}<div style="font-size:0.8em; color:#999;">${escapeHtml(post.authorName)} · ${escapeHtml(post.updatedAt)}</div></div>`;
+        if (post.content) html += `<div style="color:#444; white-space:pre-wrap; font-size:0.95em; line-height:1.5;">${escapeHtml(post.content)}</div>`;
+        if (post.attachment) html += sportsClubRenderAttachment_(post.attachment);
         if (post.poll) html += sportsClubRenderPoll(club, post);
         if (post.mine || currentUser.role === '체육교사') {
           html += `<div style="margin-top:8px; display:flex; gap:6px;"><button class="btn-small" style="background:#607d8b; padding:5px 12px; font-size:0.85em;" onclick="sportsClubStartEdit('${club}', '${escapeHtml(post.id)}', ${JSON.stringify(post.title)}, ${JSON.stringify(post.content)})">수정</button><button class="btn-small" style="background:#d32f2f; padding:5px 12px; font-size:0.85em;" onclick="sportsClubDeletePost('${club}', '${escapeHtml(post.id)}')">삭제</button></div>`;
@@ -57,6 +68,152 @@
     html += `</div>`;
 
     container.innerHTML = html;
+  }
+
+  // -------------------------------------------------------------------------
+  // 주장 전용 - 부원 모집(등록/제외). 체육교사 탭이 아니라 학생이 보는 스포츠클럽
+  // 탭 안에서, 그 부의 주장으로 지정된 학생에게만 이 패널이 보인다.
+  // -------------------------------------------------------------------------
+  function sportsClubCaptainPanelHtml_(club) {
+    const p = SPORTSCLUB_PREFIX[club];
+    return `<div class="card" style="border-top:5px solid #ffb300; background:#fffdf5;">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+        <h3 style="margin:0; color:#8d6e00;">👑 주장 관리 - 부원 모집</h3>
+        <button type="button" class="btn-small" id="${p}-captain-toggle-btn" style="background:#ffb300; padding:7px 14px;" onclick="sportsClubCaptainToggle('${club}')">펼치기</button>
+      </div>
+      <div id="${p}-captain-panel" class="hidden" style="margin-top:12px;">
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+          <select id="${p}-captain-grade" class="input-field" style="flex:1; min-width:80px; margin:0;" onchange="sportsClubCaptainAutoSearch('${club}')"><option value="">학년</option><option value="1">1학년</option><option value="2">2학년</option><option value="3">3학년</option></select>
+          <select id="${p}-captain-class" class="input-field" style="flex:1; min-width:80px; margin:0;" onchange="sportsClubCaptainAutoSearch('${club}')">${SPORTSCLUB_CAPTAIN_CLASS_OPTS}</select>
+          <select id="${p}-captain-num" class="input-field" style="flex:1; min-width:80px; margin:0;" onchange="sportsClubCaptainAutoSearch('${club}')">${SPORTSCLUB_CAPTAIN_NUM_OPTS}</select>
+        </div>
+        <div style="display:flex; gap:8px; margin-bottom:14px;">
+          <input type="text" id="${p}-captain-name" class="input-field" placeholder="이름(자동 조회)" readonly style="flex:1; margin:0; background:#f5f5f5;">
+          <button class="btn-small" id="${p}-captain-add-btn" style="background:#2e7d32;" disabled onclick="sportsClubCaptainAddMember('${club}')">➕ 등록</button>
+        </div>
+        <div id="${p}-captain-member-list"><div style="text-align:center; color:#999; padding:10px;">불러오는 중입니다...</div></div>
+      </div>
+    </div>`;
+  }
+
+  function sportsClubCaptainToggle(club) {
+    const p = SPORTSCLUB_PREFIX[club];
+    const panel = document.getElementById(`${p}-captain-panel`);
+    const btn = document.getElementById(`${p}-captain-toggle-btn`);
+    const opening = panel.classList.contains('hidden');
+    panel.classList.toggle('hidden');
+    btn.textContent = opening ? '접기' : '펼치기';
+    if (opening) sportsClubCaptainLoadMembers(club);
+  }
+
+  function sportsClubCaptainLoadMembers(club) {
+    const p = SPORTSCLUB_PREFIX[club];
+    const listEl = document.getElementById(`${p}-captain-member-list`);
+    listEl.innerHTML = `<div style="text-align:center; color:#999; padding:10px;">불러오는 중입니다...</div>`;
+    gsRun('getSportsClubMembersForCaptain', club, currentUser.token).then(function(res) {
+      if (!res.success) { listEl.innerHTML = `<div style="color:red; text-align:center; padding:10px;">${escapeHtml(res.message)}</div>`; return; }
+      if (res.list.length === 0) { listEl.innerHTML = `<div style="color:#999; text-align:center; padding:10px;">등록된 부원이 없습니다.</div>`; return; }
+      listEl.innerHTML = res.list.map(function(s) {
+        const officerTag = s.isCaptain ? ' <span style="color:#ffb300; font-weight:bold;">(주장)</span>' : (s.isViceCaptain ? ' <span style="color:#1565c0; font-weight:bold;">(부주장)</span>' : '');
+        const removeBtn = (s.isCaptain || s.isViceCaptain) ? '' : `<button class="btn-small" style="background:#d32f2f; padding:5px 10px; font-size:0.8em;" onclick="sportsClubCaptainRemoveMember('${club}', '${escapeHtml(s.id)}')">제외</button>`;
+        return `<div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid #eee;"><div>${escapeHtml(s.id)} · <b>${escapeHtml(s.name)}</b> (${escapeHtml(s.grade)}학년)${officerTag}</div>${removeBtn}</div>`;
+      }).join('');
+    });
+  }
+
+  function sportsClubCaptainAutoSearch(club) {
+    const p = SPORTSCLUB_PREFIX[club];
+    const g = document.getElementById(`${p}-captain-grade`).value, c = document.getElementById(`${p}-captain-class`).value, n = document.getElementById(`${p}-captain-num`).value;
+    const nameInput = document.getElementById(`${p}-captain-name`), addBtn = document.getElementById(`${p}-captain-add-btn`);
+    addBtn.disabled = true;
+    nameInput.removeAttribute('data-student-id');
+    if (!g || !c || !n) { nameInput.value = ''; return; }
+    nameInput.value = '조회 중...';
+    gsRun('findStudent', g, c, n).then(function(res) {
+      if (res.success) {
+        nameInput.value = res.name;
+        nameInput.dataset.studentId = g + c.toString().padStart(2, '0') + n.toString().padStart(2, '0');
+        addBtn.disabled = false;
+      } else { nameInput.value = ''; showAlert(res.message); }
+    });
+  }
+
+  function sportsClubCaptainAddMember(club) {
+    const p = SPORTSCLUB_PREFIX[club];
+    const nameInput = document.getElementById(`${p}-captain-name`);
+    const studentId = nameInput.dataset.studentId;
+    if (!studentId) return;
+    gsRun('addSportsClubMemberByCaptain', club, studentId, currentUser.token).then(function(res) {
+      showAlert(res.message);
+      if (res.success) {
+        document.getElementById(`${p}-captain-grade`).value = '';
+        document.getElementById(`${p}-captain-class`).value = '';
+        document.getElementById(`${p}-captain-num`).value = '';
+        nameInput.value = ''; nameInput.removeAttribute('data-student-id');
+        document.getElementById(`${p}-captain-add-btn`).disabled = true;
+        sportsClubCaptainLoadMembers(club);
+      }
+    });
+  }
+
+  function sportsClubCaptainRemoveMember(club, studentId) {
+    showConfirm('이 부원을 명단에서 제외하시겠습니까?', function() {
+      gsRun('removeSportsClubMemberByCaptain', club, studentId, currentUser.token).then(function(res) {
+        showAlert(res.message);
+        if (res.success) sportsClubCaptainLoadMembers(club);
+      });
+    });
+  }
+
+  // 대회 홍보물 등 게시글 첨부파일 - 이미지면 바로 미리보기(모바일에 맞게 축소), 그 외(한글 파일 등)는 다운로드 링크로 보여준다.
+  function sportsClubRenderAttachment_(att) {
+    if (att.type === 'image') {
+      return `<div style="margin-top:8px; text-align:center;"><img src="${att.imageUrl}" alt="${escapeHtml(att.name)}" loading="lazy" data-full="${att.fullImageUrl}" data-view-url="${att.viewUrl}" data-name="${escapeHtml(att.name)}" style="max-width:100%; max-height:360px; width:auto; height:auto; border-radius:8px; cursor:zoom-in; display:inline-block;" onclick="sportsClubOpenLightbox_(this)" onerror="sportsClubAttachImgError_(this)"></div>`;
+    }
+    return `<div style="margin-top:8px;"><a href="${att.viewUrl}" target="_blank" class="btn-small" style="display:inline-block; background:#7986cb; padding:7px 14px; text-decoration:none; color:white;">📎 ${escapeHtml(att.name)} 열기</a></div>`;
+  }
+
+  // 썸네일 로드 실패 시(파일이 지워졌거나 일시적 오류) 다운로드 링크로 대체한다.
+  function sportsClubAttachImgError_(img) {
+    img.onerror = null;
+    const a = document.createElement('a');
+    a.href = img.dataset.viewUrl;
+    a.target = '_blank';
+    a.className = 'btn-small';
+    a.style.cssText = 'display:inline-block; background:#7986cb; padding:7px 14px; text-decoration:none; color:white;';
+    a.textContent = `📎 ${img.dataset.name} 열기`;
+    img.replaceWith(a);
+  }
+
+  // 첨부 이미지를 탭하면 화면 전체에 확대해서 보여주고, 다시 탭하면 닫힌다.
+  function sportsClubOpenLightbox_(img) {
+    let overlay = document.getElementById('sportsclub-lightbox');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'sportsclub-lightbox';
+      overlay.style.cssText = 'display:none; position:fixed; inset:0; background:rgba(0,0,0,0.88); z-index:9999; align-items:center; justify-content:center; padding:16px; box-sizing:border-box; cursor:zoom-out;';
+      const inner = document.createElement('img');
+      inner.style.cssText = 'max-width:100%; max-height:100%; border-radius:4px;';
+      overlay.appendChild(inner);
+      overlay.onclick = function() { overlay.style.display = 'none'; inner.src = ''; };
+      document.body.appendChild(overlay);
+    }
+    overlay.querySelector('img').src = img.dataset.full || img.src;
+    overlay.style.display = 'flex';
+  }
+
+  const SPORTSCLUB_ATTACH_EXTS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'hwp', 'hwpx'];
+
+  function sportsClubAttachSelected(club) {
+    const p = SPORTSCLUB_PREFIX[club];
+    const input = document.getElementById(`${p}-post-attach`);
+    const label = document.getElementById(`${p}-post-attach-name`);
+    const file = input.files[0];
+    if (!file) { label.innerHTML = ''; return; }
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (SPORTSCLUB_ATTACH_EXTS.indexOf(ext) === -1) { showAlert('이미지(jpg/png 등) 또는 한글(hwp) 파일만 첨부할 수 있습니다.'); input.value = ''; label.innerHTML = ''; return; }
+    if (file.size > 20 * 1024 * 1024) { showAlert('첨부파일은 20MB 이하만 가능합니다.'); input.value = ''; label.innerHTML = ''; return; }
+    label.innerHTML = `${escapeHtml(file.name)} <a href="#" onclick="event.preventDefault(); document.getElementById('${p}-post-attach').value=''; document.getElementById('${p}-post-attach-name').innerHTML='';" style="color:#d32f2f;">✕</a>`;
   }
 
   function sportsClubToggleComposeMode(club) {
@@ -133,11 +290,22 @@
       scheduleEnd = `${date}T${end}`;
       deadline = `${deadlineDate}T${deadlineTime}`;
     }
-    if (!title || !content) { showAlert('제목과 내용을 모두 입력하세요.'); return; }
-    gsRun('createSportsClubPost', club, title, content, isPoll, scheduleStart, scheduleEnd, deadline, currentUser.token).then(function(res) {
-      showAlert(res.message);
-      if (res.success) loadSportsClubView(club);
-    });
+    const attachInput = document.getElementById(`${p}-post-attach`);
+    const attachFile = attachInput && attachInput.files[0];
+    if (!attachFile && (!title || !content)) { showAlert('제목과 내용을 모두 입력하세요.'); return; }
+    const submit = (attachData, attachName) => {
+      gsRun('createSportsClubPost', club, title, content, isPoll, scheduleStart, scheduleEnd, deadline, attachData, attachName, currentUser.token).then(function(res) {
+        showAlert(res.message);
+        if (res.success) loadSportsClubView(club);
+      });
+    };
+    if (attachFile) {
+      const reader = new FileReader();
+      reader.onload = function(e) { submit(e.target.result, attachFile.name); };
+      reader.readAsDataURL(attachFile);
+    } else {
+      submit('', '');
+    }
   }
 
   function sportsClubStartEdit(club, postId, title, content) {

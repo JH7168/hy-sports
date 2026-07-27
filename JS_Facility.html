@@ -183,7 +183,7 @@
         <button class="btn-primary" style="flex:1; min-width:120px; background:#00838f;" onclick="facilitySaveSlotEdit('${facility}')">💾 정보 저장</button>
         <button class="btn-primary" style="flex:1; min-width:120px; background:#ff9800;" onclick="facilityDrawSlotNow('${facility}')">🎲 지금 (재)추첨</button>
         <button class="btn-primary" style="flex:1; min-width:120px; background:#607d8b;" onclick="facilityPostRainNotice('${facility}')">🌧️ 우천취소 안내 공지 등록</button>
-        <button class="btn-primary" style="flex:1; min-width:120px; background:#fff; color:#d32f2f; border:1px solid #d32f2f;" onclick="facilityCancelSlotNow('${facility}')">🛑 슬롯 취소</button>
+        <button class="btn-primary" style="flex:1; min-width:120px; background:#fff; color:#d32f2f; border:1px solid #d32f2f;" onclick="facilityDeleteSlotNow('${facility}')">🗑️ 슬롯 삭제</button>
       </div>
       <h4 style="color:#006064; margin-bottom:8px;">📥 신청 현황 (팀원 전원 가입확정된 팀만 추첨 대상, 선정팀은 초록색)</h4>
       <div id="${p}-app-list"><div style="text-align:center; color:#999; padding:15px;">불러오는 중입니다...</div></div>
@@ -262,10 +262,10 @@
     });
   }
 
-  function facilityCancelSlotNow(facility) {
+  function facilityDeleteSlotNow(facility) {
     const slotId = facilitySelectedSlotId[facility]; if (!slotId) return;
-    showConfirm('이 예약 슬롯을 취소하시겠습니까?', function() {
-      gsRun('cancelFacilitySlot', facility, slotId, currentUser.token).then(function(res) { showAlert(res.message); if (res.success) loadFacilityAdmin(facility); });
+    showConfirm('이 예약 슬롯을 완전히 삭제하시겠습니까?<br>신청된 팀·팀원 명단도 함께 삭제되며 되돌릴 수 없습니다.', function() {
+      gsRun('deleteFacilitySlot', facility, slotId, currentUser.token).then(function(res) { showAlert(res.message); if (res.success) loadFacilityAdmin(facility); });
     });
   }
 

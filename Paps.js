@@ -16,16 +16,30 @@ function uploadPapsPdf(data, filename, token) {
   } catch(e) { return { success: false, message: "업로드 실패: " + e.message }; }
 }
 
-function clearAllPapsPdf(token) {
+// 파일명은 항상 "학번(학년1+반2+번호2자리).pdf" 형식으로 저장되므로(uploadPapsPdf 참고),
+// 학년/반을 잘못 골라 대량 업로드했을 때 그 학년·반에 해당하는 파일만 골라 지울 수 있다.
+// cls가 '전체'면 그 학년의 모든 반을 지운다.
+function clearPapsPdfByClass(grade, cls, token) {
   try {
     requirePeTeacher(token);
+    const gradeStr = grade ? grade.toString().trim() : '';
+    if (!gradeStr) return { success: false, message: "학년을 선택하세요." };
+    const clsStr = (!cls || cls === '전체') ? null : cls.toString().trim().padStart(2, '0');
     const FOLDER_ID = "1m31h6WC-EGuVHjaHi1ecBKdSDRBvOAvP";
     const folder = DriveApp.getFolderById(FOLDER_ID);
     const files = folder.getFiles();
     let deleteCount = 0;
-    while (files.hasNext()) { let file = files.next(); file.setTrashed(true); deleteCount++; }
-    return { success: true, message: `지정 폴더 안의 PDF 파일 총 ${deleteCount}건을 깨끗하게 정리했습니다!` };
-  } catch(e) { return { success: false, message: "드라이브 비우기 중 오류 발생: " + e.message }; }
+    while (files.hasNext()) {
+      const file = files.next();
+      const match = file.getName().match(/^(\d)(\d{2})\d{2}\.pdf$/i);
+      if (!match) continue;
+      if (match[1] !== gradeStr) continue;
+      if (clsStr && match[2] !== clsStr) continue;
+      file.setTrashed(true); deleteCount++;
+    }
+    const clsLabel = clsStr ? (cls.toString().trim() + '반') : '전체 반';
+    return { success: true, message: `${gradeStr}학년 ${clsLabel}의 PDF 파일 총 ${deleteCount}건을 삭제했습니다.` };
+  } catch(e) { return { success: false, message: "삭제 중 오류 발생: " + e.message }; }
 }
 
 function getAdminGradeStats(year, token) {
@@ -79,6 +93,55 @@ function getAdminGradeStats(year, token) {
         strength: { rec: (stats[g].strengthRec / cnt).toFixed(1), score: (stats[g].strengthScore / cnt).toFixed(1), grade: (stats[g].strengthGrade / cnt).toFixed(1) },
         power: { rec: (stats[g].powerRec / cnt).toFixed(1), score: (stats[g].powerScore / cnt).toFixed(1), grade: (stats[g].powerGrade / cnt).toFixed(1) },
         bmi: { rec: (stats[g].bmiRec / cnt).toFixed(1), score: (stats[g].bmiScore / cnt).toFixed(1), grade: (stats[g].bmiGrade / cnt).toFixed(1) }
+      };
+    }
+    return { success: true, data: result };
+  } catch (e) { return { success: false, message: e.message }; }
+}
+
+// 학년별 종합점수 TOP5 + 종목별(심폐지구력/유연성/근력/순발력/BMI) 점수 TOP5를 계산한다.
+// 종목마다 기록의 좋고 나쁨 방향이 다르므로(예: BMI는 높다고 좋은 게 아님) 원기록이 아닌,
+// 이미 방향까지 반영해 계산된 점수(0~20점) 기준으로 순위를 매긴다.
+function getPapsTopRankings(year, token) {
+  try {
+    requirePeTeacher(token);
+    if (!year) year = getCurrentAcademicYear();
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName('PAPS_상세_' + year);
+    if (!sheet) return { success: false, message: `${year}학년도 데이터가 없습니다.` };
+
+    const data = sheet.getDataRange().getValues();
+    const byGrade = { "1": [], "2": [], "3": [] };
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i]; if (!row[0]) continue;
+      const grade = row[0].toString().trim().charAt(0);
+      if (!byGrade[grade]) continue;
+      byGrade[grade].push({
+        name: row[1] ? row[1].toString().trim() : '',
+        totalScore: parseNum(row[2]),
+        cardioRec: row[4], cardioScore: parseNum(row[5]),
+        flexRec: row[7], flexScore: parseNum(row[8]),
+        strengthRec: row[10], strengthScore: parseNum(row[11]),
+        powerRec: row[13], powerScore: parseNum(row[14]),
+        bmiRec: row[16], bmiScore: parseNum(row[17])
+      });
+    }
+
+    function top5(rows, scoreKey, recKey) {
+      return rows.slice().sort((a, b) => b[scoreKey] - a[scoreKey]).slice(0, 5)
+        .map((r, idx) => ({ rank: idx + 1, name: r.name, record: recKey ? r[recKey] : null, score: r[scoreKey] }));
+    }
+
+    const result = {};
+    for (const g in byGrade) {
+      const rows = byGrade[g];
+      result[g] = {
+        total: top5(rows, 'totalScore', null),
+        cardio: top5(rows, 'cardioScore', 'cardioRec'),
+        flex: top5(rows, 'flexScore', 'flexRec'),
+        strength: top5(rows, 'strengthScore', 'strengthRec'),
+        power: top5(rows, 'powerScore', 'powerRec'),
+        bmi: top5(rows, 'bmiScore', 'bmiRec')
       };
     }
     return { success: true, data: result };

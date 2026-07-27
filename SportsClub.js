@@ -42,6 +42,10 @@ function setupSportsClubSheets() {
       postSheet.getRange(1, 10, 1, 2).setValues([['일정시작', '일정종료']]).setBackground("#3949ab").setFontColor("white").setFontWeight("bold");
     }
   }
+  // 첨부파일(홍보물 jpg·한글 파일 등) 컬럼이 없는 기존 시트는 한 번만 보정한다.
+  if (postSheet.getRange(1, 13).getValue() !== '첨부파일ID') {
+    postSheet.getRange(1, 13, 1, 3).setValues([['첨부파일ID', '첨부파일명', '첨부파일타입']]).setBackground("#3949ab").setFontColor("white").setFontWeight("bold");
+  }
   let commentSheet = ss.getSheetByName('스포츠클럽_댓글');
   if (!commentSheet) {
     commentSheet = ss.insertSheet('스포츠클럽_댓글');
@@ -64,6 +68,21 @@ function isSportsClubMember_(club, studentId) {
   return false;
 }
 
+// 해당 부에 등록된 학생이면서 주장(Y)으로 표시된 경우만 true.
+function isSportsClubCaptain_(club, studentId) {
+  const data = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('스포츠클럽_명단').getDataRange().getValues();
+  const idStr = studentId.toString().trim();
+  for (let i = 1; i < data.length; i++) { if (data[i][0] === club && data[i][1] && data[i][1].toString().trim() === idStr) return data[i][5] === 'Y'; }
+  return false;
+}
+
+// 부원 모집(등록/제외)은 체육교사 또는 그 부의 주장만 할 수 있다. 부주장·일반 부원은 불가.
+function requireSportsClubCaptain_(club, token) {
+  const session = requireSession(token);
+  if (session.role !== '학생' || !isSportsClubCaptain_(club, session.id)) throw new Error(CLUB_LABELS[club] + " 주장만 이용할 수 있는 기능입니다.");
+  return session;
+}
+
 // 체육교사이거나, 해당 부에 등록된 학생 본인만 허용.
 // 게시글/설문 관련 함수들은 모두 이 함수를 거치므로, 여기서 한 번 시트 존재를 보장해두면
 // (예: 배포 시점 차이로 새로 추가된 시트인 스포츠클럽_설문응답이 아직 없는 경우) 개별
@@ -78,45 +97,75 @@ function requireSportsClubAccess(club, token) {
 }
 
 // ==========================================================
-// 부원 명단 관리 (체육교사 전용)
+// 부원 명단 관리 (체육교사 또는 그 부의 주장)
+// 실제 처리 로직은 core 함수에 모아두고, 교사용/주장용 진입점은 각자 서버에서
+// 직접 권한을 검증한 뒤 core를 호출한다(클라이언트가 보낸 role은 신뢰하지 않는다).
 // ==========================================================
+function sportsClubAddMemberCore_(club, studentId) {
+  const idStr = studentId.toString().trim();
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('스포츠클럽_명단');
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) { if (data[i][0] === club && data[i][1] && data[i][1].toString().trim() === idStr) return { success: false, message: "이미 등록된 부원입니다." }; }
+  const info = lookupStudentInfo(idStr);
+  if (!info) return { success: false, message: "명렬표에서 학번을 찾을 수 없습니다." };
+  const dateStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
+  sheet.appendRow([club, idStr, info.name, info.grade, dateStr]);
+  return { success: true, message: info.name + "님을 " + CLUB_LABELS[club] + " 부원으로 등록했습니다." };
+}
+
+function sportsClubRemoveMemberCore_(club, studentId) {
+  const idStr = studentId.toString().trim();
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('스포츠클럽_명단');
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) { if (data[i][0] === club && data[i][1] && data[i][1].toString().trim() === idStr) { sheet.deleteRow(i + 1); return { success: true, message: "명단에서 삭제했습니다." }; } }
+  return { success: false, message: "명단에서 찾을 수 없습니다." };
+}
+
+function sportsClubMembersCore_(club) {
+  const data = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('스포츠클럽_명단').getDataRange().getValues();
+  const list = [];
+  for (let i = 1; i < data.length; i++) { if (data[i][0] === club) list.push({ id: data[i][1].toString(), name: data[i][2], grade: data[i][3], regDate: toDateStr_(data[i][4]), isCaptain: data[i][5] === 'Y', isViceCaptain: data[i][6] === 'Y' }); }
+  // 학번이 "학년+반(2자리)+번호(2자리)"로 구성되어 있어, 문자열 그대로 정렬하면
+  // 학년 -> 반 -> 번호 순서가 자연스럽게 맞춰진다.
+  list.sort((a, b) => a.id.localeCompare(b.id));
+  return list;
+}
+
 function addSportsClubMember(club, studentId, token) {
-  try {
-    requirePeTeacher(token);
-    const idStr = studentId.toString().trim();
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('스포츠클럽_명단');
-    const data = sheet.getDataRange().getValues();
-    for (let i = 1; i < data.length; i++) { if (data[i][0] === club && data[i][1] && data[i][1].toString().trim() === idStr) return { success: false, message: "이미 등록된 부원입니다." }; }
-    const info = lookupStudentInfo(idStr);
-    if (!info) return { success: false, message: "명렬표에서 학번을 찾을 수 없습니다." };
-    const dateStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
-    sheet.appendRow([club, idStr, info.name, info.grade, dateStr]);
-    return { success: true, message: info.name + "님을 " + CLUB_LABELS[club] + " 부원으로 등록했습니다." };
-  } catch (e) { return { success: false, message: e.message }; }
+  try { requirePeTeacher(token); return sportsClubAddMemberCore_(club, studentId); } catch (e) { return { success: false, message: e.message }; }
 }
 
 function removeSportsClubMember(club, studentId, token) {
-  try {
-    requirePeTeacher(token);
-    const idStr = studentId.toString().trim();
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('스포츠클럽_명단');
-    const data = sheet.getDataRange().getValues();
-    for (let i = 1; i < data.length; i++) { if (data[i][0] === club && data[i][1] && data[i][1].toString().trim() === idStr) { sheet.deleteRow(i + 1); return { success: true, message: "명단에서 삭제했습니다." }; } }
-    return { success: false, message: "명단에서 찾을 수 없습니다." };
-  } catch (e) { return { success: false, message: e.message }; }
+  try { requirePeTeacher(token); return sportsClubRemoveMemberCore_(club, studentId); } catch (e) { return { success: false, message: e.message }; }
 }
 
 function getSportsClubMembers(club, token) {
+  try { requirePeTeacher(token); return sanitizeDates_({ success: true, list: sportsClubMembersCore_(club) }); } catch (e) { return { success: false, message: e.message, list: [] }; }
+}
+
+// 주장은 부원을 자유롭게 모집·등록할 수 있지만, 주장·부주장 임명/해제는 여전히
+// 체육교사 전용 기능이므로(임명 오·남용 방지) 이 경로로는 일반 부원만 제외할 수 있다.
+function addSportsClubMemberByCaptain(club, studentId, token) {
+  try { requireSportsClubCaptain_(club, token); return sportsClubAddMemberCore_(club, studentId); } catch (e) { return { success: false, message: e.message }; }
+}
+
+function removeSportsClubMemberByCaptain(club, studentId, token) {
   try {
-    requirePeTeacher(token);
+    requireSportsClubCaptain_(club, token);
+    const idStr = studentId.toString().trim();
     const data = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('스포츠클럽_명단').getDataRange().getValues();
-    const list = [];
-    for (let i = 1; i < data.length; i++) { if (data[i][0] === club) list.push({ id: data[i][1].toString(), name: data[i][2], grade: data[i][3], regDate: toDateStr_(data[i][4]), isCaptain: data[i][5] === 'Y', isViceCaptain: data[i][6] === 'Y' }); }
-    // 학번이 "학년+반(2자리)+번호(2자리)"로 구성되어 있어, 문자열 그대로 정렬하면
-    // 학년 -> 반 -> 번호 순서가 자연스럽게 맞춰진다.
-    list.sort((a, b) => a.id.localeCompare(b.id));
-    return sanitizeDates_({ success: true, list: list });
-  } catch (e) { return { success: false, message: e.message, list: [] }; }
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][0] === club && data[i][1] && data[i][1].toString().trim() === idStr) {
+        if (data[i][5] === 'Y' || data[i][6] === 'Y') return { success: false, message: "주장·부주장은 체육교사만 명단에서 제외할 수 있습니다." };
+        break;
+      }
+    }
+    return sportsClubRemoveMemberCore_(club, idStr);
+  } catch (e) { return { success: false, message: e.message }; }
+}
+
+function getSportsClubMembersForCaptain(club, token) {
+  try { requireSportsClubCaptain_(club, token); return sanitizeDates_({ success: true, list: sportsClubMembersCore_(club) }); } catch (e) { return { success: false, message: e.message, list: [] }; }
 }
 
 // 부에 주장은 한 번에 한 명만 존재하도록, 새로 임명하면 기존 주장은 자동으로 해제한다.
@@ -203,13 +252,44 @@ function getMySportsClubs(token) {
 // ==========================================================
 // 부원 자유게시판
 // ==========================================================
+// 대회 홍보물(jpg 이미지·한글 문서 등) 첨부파일을 저장할 드라이브 폴더.
+// 최초 업로드 시 한 번만 만들고, 폴더 ID를 스크립트 속성에 저장해 재사용한다.
+function sportsClubAttachFolder_() {
+  const props = PropertiesService.getScriptProperties();
+  const savedId = props.getProperty('SPORTSCLUB_ATTACH_FOLDER_ID');
+  if (savedId) {
+    try { return DriveApp.getFolderById(savedId); } catch (e) { /* 폴더가 지워졌으면 아래에서 새로 만든다 */ }
+  }
+  const folder = DriveApp.createFolder('스포츠클럽_첨부파일');
+  props.setProperty('SPORTSCLUB_ATTACH_FOLDER_ID', folder.getId());
+  return folder;
+}
+
+const SPORTSCLUB_IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+
+// 첨부파일 데이터URL을 드라이브에 업로드하고 { fileId, name, type } 형태로 반환한다.
+// type은 'image'(화면에 바로 미리보기) 또는 'file'(다운로드 링크만 제공, 한글 문서 등)이다.
+function sportsClubSaveAttachment_(attachData, attachName) {
+  if (attachData.length > 27000000) throw new Error("첨부파일 용량이 너무 큽니다(20MB 이하로 올려주세요).");
+  const ext = (attachName.split('.').pop() || '').toLowerCase();
+  const isImage = SPORTSCLUB_IMAGE_EXTS.indexOf(ext) !== -1;
+  const bytes = Utilities.base64Decode(attachData.substr(attachData.indexOf('base64,') + 7));
+  const mimeType = isImage ? ('image/' + (ext === 'jpg' ? 'jpeg' : ext)) : 'application/octet-stream';
+  const blob = Utilities.newBlob(bytes, mimeType, attachName);
+  const file = sportsClubAttachFolder_().createFile(blob);
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  return { fileId: file.getId(), name: attachName, type: isImage ? 'image' : 'file' };
+}
+
 // isPoll이 true면 일정시작/일정종료/마감일시를 함께 저장해 "모집 설문"이 딸린 글로 등록한다.
-function createSportsClubPost(club, title, content, isPoll, scheduleStart, scheduleEnd, deadline, token) {
+// attachData(데이터URL)와 attachName이 함께 오면 첨부파일(홍보물 이미지·한글 문서 등)도 저장한다.
+function createSportsClubPost(club, title, content, isPoll, scheduleStart, scheduleEnd, deadline, attachData, attachName, token) {
   try {
     const session = requireSportsClubAccess(club, token);
     title = (title || '').toString().trim();
     content = (content || '').toString().trim();
-    if (!title || !content) return { success: false, message: "제목과 내용을 모두 입력하세요." };
+    const hasAttach = !!(attachData && attachName);
+    if (!hasAttach && (!title || !content)) return { success: false, message: "제목과 내용을 모두 입력하세요." };
     const poll = !!isPoll;
     if (poll) {
       scheduleStart = (scheduleStart || '').toString().trim();
@@ -217,9 +297,15 @@ function createSportsClubPost(club, title, content, isPoll, scheduleStart, sched
       if (!scheduleStart || !scheduleEnd || !deadline) return { success: false, message: "모집 설문은 일정(시작·종료)과 마감일시를 모두 입력해야 합니다." };
       if (new Date(scheduleEnd) <= new Date(scheduleStart)) return { success: false, message: "종료 시간은 시작 시간보다 늦어야 합니다." };
     }
+    let attachment = null;
+    if (attachData && attachName) attachment = sportsClubSaveAttachment_(attachData, attachName);
     const postId = Utilities.getUuid();
     const dateStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm");
-    SpreadsheetApp.getActiveSpreadsheet().getSheetByName('스포츠클럽_게시글').appendRow([club, postId, session.id, session.name, title, content, dateStr, dateStr, poll ? 'Y' : 'N', poll ? scheduleStart : '', poll ? scheduleEnd : '', poll ? deadline : '']);
+    SpreadsheetApp.getActiveSpreadsheet().getSheetByName('스포츠클럽_게시글').appendRow([
+      club, postId, session.id, session.name, title, content, dateStr, dateStr, poll ? 'Y' : 'N',
+      poll ? scheduleStart : '', poll ? scheduleEnd : '', poll ? deadline : '',
+      attachment ? attachment.fileId : '', attachment ? attachment.name : '', attachment ? attachment.type : ''
+    ]);
     return { success: true, message: "글이 등록되었습니다." };
   } catch (e) { return { success: false, message: e.message }; }
 }
@@ -252,7 +338,9 @@ function deleteSportsClubPost(club, postId, token) {
     for (let i = 1; i < data.length; i++) {
       if (data[i][0] === club && data[i][1] === postId) {
         if (data[i][2].toString() !== session.id.toString() && session.role !== '체육교사') return { success: false, message: "본인이 작성한 글만 삭제할 수 있습니다." };
+        const attachFileId = data[i][12];
         sheet.deleteRow(i + 1);
+        if (attachFileId) { try { DriveApp.getFileById(attachFileId).setTrashed(true); } catch (e) { /* 이미 지워진 파일이면 무시 */ } }
         // 글이 삭제되면 그 글에 달린 댓글·설문 응답도 함께 정리한다.
         const commentSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('스포츠클럽_댓글');
         const commentData = commentSheet.getDataRange().getValues();
@@ -270,6 +358,7 @@ function deleteSportsClubPost(club, postId, token) {
 function getSportsClubPosts(club, token) {
   try {
     const session = requireSportsClubAccess(club, token);
+    const amICaptain = session.role === '학생' && isSportsClubCaptain_(club, session.id);
     const data = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('스포츠클럽_게시글').getDataRange().getValues();
     const commentData = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('스포츠클럽_댓글').getDataRange().getValues();
     const commentsByPost = {};
@@ -304,10 +393,21 @@ function getSportsClubPosts(club, token) {
           myResponse: mine ? mine.response : null
         };
       }
+      const attachFileId = data[i][12];
+      if (attachFileId) {
+        const isImg = data[i][14] === 'image';
+        item.attachment = {
+          fileId: attachFileId, name: data[i][13], type: data[i][14],
+          viewUrl: 'https://drive.google.com/file/d/' + attachFileId + '/view',
+          // uc?export=view는 모바일 브라우저에서 깨진 이미지로 뜨는 경우가 많아 썸네일 엔드포인트를 사용한다.
+          imageUrl: isImg ? ('https://drive.google.com/thumbnail?id=' + attachFileId + '&sz=w800') : null,
+          fullImageUrl: isImg ? ('https://drive.google.com/thumbnail?id=' + attachFileId + '&sz=w1600') : null
+        };
+      }
       list.push(item);
     }
     list.reverse();
-    return sanitizeDates_({ success: true, list: list });
+    return sanitizeDates_({ success: true, list: list, amICaptain: amICaptain });
   } catch (e) { return { success: false, message: e.message, list: [] }; }
 }
 

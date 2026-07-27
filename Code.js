@@ -5,6 +5,20 @@
 // ==========================================================
 function include(filename) { return HtmlService.createTemplateFromFile(filename).evaluate().getContent(); }
 
+// setupSystemSheets()는 시트 존재 여부를 수십 번 확인하는 무거운 작업이라, 예전처럼
+// 페이지를 열 때마다(doGet마다) 매번 실행하면 그만큼 로딩이 느려진다. 시트 구조는
+// 한 번만 맞춰두면 되므로 스크립트 속성에 완료 버전을 기록해두고 그 이후로는 건너뛴다.
+// 이후 시트/컬럼 구조를 바꾸는 코드를 추가할 때는 이 버전 숫자를 올려야 기존
+// 스프레드시트에도 그 변경(마이그레이션)이 한 번 더 반영된다.
+const SETUP_VERSION = '1';
+
+function ensureSystemSheetsSetup_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('SETUP_VERSION') === SETUP_VERSION) return;
+  setupSystemSheets();
+  props.setProperty('SETUP_VERSION', SETUP_VERSION);
+}
+
 function setupSystemSheets() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const recentYears = getRecentAcademicYears(3);
@@ -87,6 +101,6 @@ function setupSystemSheets() {
 }
 
 function doGet() {
-  setupSystemSheets();
+  ensureSystemSheetsSetup_();
   return HtmlService.createTemplateFromFile('Index').evaluate().setTitle('한영고 체육인성부').addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }

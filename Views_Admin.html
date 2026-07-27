@@ -284,6 +284,9 @@
             <tbody id="admin-grade-stats-tbody"><tr><td colspan="4" style="padding:30px; color:#999;">스프레드시트에서 데이터를 로드하는 중입니다...</td></tr></tbody>
           </table>
         </div>
+        <hr style="border:0; border-top:1px solid #eee; margin:20px 0;">
+        <h4 style="margin:0 0 12px; color:#e65100;">🏅 TOP5 랭킹</h4>
+        <div id="paps-ranking-container"></div>
       </div>
       <div class="card">
         <h3 style="margin-top:0; color:#203a43;">📊 학생 PAPS 성적표 업로드</h3>
@@ -296,12 +299,30 @@
           </div>
           <hr style="border:0; border-top:1px solid #ddd; margin:30px 0;">
           <div style="background:#f0f2f5; padding:20px; border-radius:8px; margin-top:10px;">
-            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:15px;">
-              <input type="file" id="pdf-file" accept="application/pdf" multiple style="flex:1; min-width:200px; font-family:'NanumSquareRound'; background:white; padding:8px; border:1px solid #ccc; border-radius:6px;">
-              <button class="btn-primary" id="btn-paps-clear" onclick="clearPapsFolder()" style="background:#fff; border:1px solid #d32f2f; color:#d32f2f; padding:8px 15px; font-size:0.9em; margin-top:0; border-radius:6px; cursor:pointer; font-weight:bold; white-space:nowrap;">🚨 잘못 올라간 PDF 전체 초기화</button>
-            </div>
+            <input type="file" id="pdf-file" accept="application/pdf" multiple style="margin-bottom:10px; width:100%; font-family:'NanumSquareRound'; background:white; padding:8px; border:1px solid #ccc; border-radius:6px;">
             <button class="btn-primary" onclick="uploadPdf()" style="background:#203a43; margin-top:0; width:100%;">선택한 PDF 파일 모두 업로드</button>
-            <p id="upload-msg" style="font-size:0.95em; font-weight:bold; margin-top:15px; margin-bottom:0;"></p><div id="clear-msg" style="margin-top:8px; font-weight:bold; font-size:0.9em;"></div>
+            <p id="upload-msg" style="font-size:0.95em; font-weight:bold; margin-top:15px; margin-bottom:0;"></p>
+            <hr style="border:0; border-top:1px solid #ccc; margin:20px 0;">
+            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+              <select id="pdf-clear-grade" style="padding:8px; border-radius:6px; border:1px solid #d32f2f; color:#d32f2f; font-weight:bold; font-family:'NanumSquareRound';">
+                <option value="1">1학년</option>
+                <option value="2">2학년</option>
+                <option value="3">3학년</option>
+              </select>
+              <select id="pdf-clear-class" style="padding:8px; border-radius:6px; border:1px solid #d32f2f; color:#d32f2f; font-weight:bold; font-family:'NanumSquareRound';">
+                <option value="전체">전체</option>
+                <option value="1">1반</option>
+                <option value="2">2반</option>
+                <option value="3">3반</option>
+                <option value="4">4반</option>
+                <option value="5">5반</option>
+                <option value="6">6반</option>
+                <option value="7">7반</option>
+                <option value="8">8반</option>
+              </select>
+              <button class="btn-primary" id="btn-paps-clear" onclick="clearPapsFolder()" style="flex:1; min-width:160px; background:#fff; border:1px solid #d32f2f; color:#d32f2f; padding:8px 15px; font-size:0.9em; margin-top:0; border-radius:6px; cursor:pointer; font-weight:bold; white-space:nowrap;">🚨 선택 학년·반 PDF 초기화</button>
+            </div>
+            <div id="clear-msg" style="margin-top:8px; font-weight:bold; font-size:0.9em;"></div>
           </div>
         </div>
       </div>
@@ -387,6 +408,12 @@
     <!-- [관리자] 점심시간 관리 통합 - 관리학생 명단 / 반별 체육부장 지정 / 전체 위반기록 (풋살장·체육관·운동장 공용) -->
     <div id="content-pe-facility-managers" class="hidden">
       <div class="card" style="border-top: 5px solid #d32f2f; margin-bottom: 20px;">
+        <h3 style="margin-top:0; color:#b71c1c;">🚨 점심시간 시설 이용규칙 위반 통합 조회</h3>
+        <p style="font-size:0.85em; color:#888; margin-top:-8px;">풋살장·체육관·운동장에서 발생한 위반 기록을 모두 모아 보여줍니다.</p>
+        <div id="facility-all-violation-list"><div style="text-align:center; color:#999; padding:15px;">불러오는 중입니다...</div></div>
+      </div>
+
+      <div class="card" style="border-top: 5px solid #d32f2f; margin-bottom: 20px;">
         <h3 style="margin-top:0; color:#b71c1c;">🎯 점심시간 시설 관리학생 명단</h3>
         <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; background:#f0f2f5; padding:15px; border-radius:8px; margin-bottom:15px;">
           <select id="facmgr-add-grade" class="input-field" style="flex:1; min-width:70px; margin:0;" onchange="facilityMgrAutoSearchStudentShared()"><option value="">학년</option><option value="1">1학년</option><option value="2">2학년</option><option value="3">3학년</option></select>
@@ -425,12 +452,6 @@
             <tbody id="classleader-tbody"><tr><td colspan="5" style="padding:20px; color:#999;">불러오는 중입니다...</td></tr></tbody>
           </table>
         </div>
-      </div>
-
-      <div class="card" style="border-top: 5px solid #d32f2f;">
-        <h3 style="margin-top:0; color:#b71c1c;">🚨 점심시간 시설 이용규칙 위반 통합 조회</h3>
-        <p style="font-size:0.85em; color:#888; margin-top:-8px;">풋살장·체육관·운동장에서 발생한 위반 기록을 모두 모아 보여줍니다.</p>
-        <div id="facility-all-violation-list"><div style="text-align:center; color:#999; padding:15px;">불러오는 중입니다...</div></div>
       </div>
     </div>
 

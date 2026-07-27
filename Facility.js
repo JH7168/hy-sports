@@ -286,15 +286,32 @@ function updateFacilitySlot(facility, slotId, date, mode, grade, appStart, appEn
   } catch (e) { return { success: false, message: e.message }; }
 }
 
-function cancelFacilitySlot(facility, slotId, token) {
+// 슬롯을 목록에서 완전히 삭제한다(취소 표시로 남기지 않음). 신청된 팀·팀원 명단도 함께 정리한다.
+function deleteFacilitySlot(facility, slotId, token) {
   try {
     requirePeTeacher(token);
     const sheet = getFacilitySlotSheet_(facility);
     const data = sheet.getDataRange().getValues();
+    let found = false;
     for (let i = 1; i < data.length; i++) {
-      if (data[i][0] === slotId) { sheet.getRange(i + 1, 9).setValue('CANCELLED'); return { success: true, message: "슬롯을 취소했습니다." }; }
+      if (data[i][0] === slotId) { sheet.deleteRow(i + 1); found = true; break; }
     }
-    return { success: false, message: "슬롯을 찾을 수 없습니다." };
+    if (!found) return { success: false, message: "슬롯을 찾을 수 없습니다." };
+
+    const appSheet = getFacilityAppSheet_(facility);
+    const appData = appSheet.getDataRange().getValues();
+    const removedAppIds = {};
+    for (let i = appData.length - 1; i >= 1; i--) {
+      if (appData[i][1] === slotId) { removedAppIds[appData[i][0]] = true; appSheet.deleteRow(i + 1); }
+    }
+    if (Object.keys(removedAppIds).length > 0) {
+      const memberSheet = getFacilityMemberSheet_(facility);
+      const memberData = memberSheet.getDataRange().getValues();
+      for (let i = memberData.length - 1; i >= 1; i--) {
+        if (removedAppIds[memberData[i][0]]) memberSheet.deleteRow(i + 1);
+      }
+    }
+    return { success: true, message: "슬롯을 삭제했습니다." };
   } catch (e) { return { success: false, message: e.message }; }
 }
 
