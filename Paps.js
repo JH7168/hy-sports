@@ -99,9 +99,10 @@ function getAdminGradeStats(year, token) {
   } catch (e) { return { success: false, message: e.message }; }
 }
 
-// 학년별 종합점수 TOP5 + 종목별(심폐지구력/유연성/근력/순발력/BMI) 점수 TOP5를 계산한다.
-// 종목마다 기록의 좋고 나쁨 방향이 다르므로(예: BMI는 높다고 좋은 게 아님) 원기록이 아닌,
-// 이미 방향까지 반영해 계산된 점수(0~20점) 기준으로 순위를 매긴다.
+// 학년별 종합점수 TOP5 + 종목별(심폐지구력/유연성/근력/순발력) 점수 TOP5를 계산한다.
+// BMI는 "높은 게 좋다"고 말하기 애매한 지표라 랭킹 대상에서 제외한다. 종목별 순위는
+// 원기록이 아니라 이미 방향까지 반영해 계산된 점수(0~20점) 기준으로 매기되, 점수가
+// 같으면 원기록이 더 높은 쪽을 우선한다.
 function getPapsTopRankings(year, token) {
   try {
     requirePeTeacher(token);
@@ -122,14 +123,15 @@ function getPapsTopRankings(year, token) {
         cardioRec: row[4], cardioScore: parseNum(row[5]),
         flexRec: row[7], flexScore: parseNum(row[8]),
         strengthRec: row[10], strengthScore: parseNum(row[11]),
-        powerRec: row[13], powerScore: parseNum(row[14]),
-        bmiRec: row[16], bmiScore: parseNum(row[17])
+        powerRec: row[13], powerScore: parseNum(row[14])
       });
     }
 
     function top5(rows, scoreKey, recKey) {
-      return rows.slice().sort((a, b) => b[scoreKey] - a[scoreKey]).slice(0, 5)
-        .map((r, idx) => ({ rank: idx + 1, name: r.name, record: recKey ? r[recKey] : null, score: r[scoreKey] }));
+      return rows.slice().sort((a, b) => {
+        if (b[scoreKey] !== a[scoreKey]) return b[scoreKey] - a[scoreKey];
+        return recKey ? parseNum(b[recKey]) - parseNum(a[recKey]) : 0;
+      }).slice(0, 5).map((r, idx) => ({ rank: idx + 1, name: r.name, record: recKey ? r[recKey] : null, score: r[scoreKey] }));
     }
 
     const result = {};
@@ -140,8 +142,7 @@ function getPapsTopRankings(year, token) {
         cardio: top5(rows, 'cardioScore', 'cardioRec'),
         flex: top5(rows, 'flexScore', 'flexRec'),
         strength: top5(rows, 'strengthScore', 'strengthRec'),
-        power: top5(rows, 'powerScore', 'powerRec'),
-        bmi: top5(rows, 'bmiScore', 'bmiRec')
+        power: top5(rows, 'powerScore', 'powerRec')
       };
     }
     return { success: true, data: result };
