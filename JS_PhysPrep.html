@@ -3,6 +3,7 @@
   // 소규모수업 - 체대입시반 모듈
   // =========================================================================
   let physPrepEventsCache = [];
+  let physPrepGroupsCache = [];
   let physPrepVerifiedStudent = null;
 
   function physPrepRoundLabel(round) { return round + '월'; }
@@ -30,6 +31,48 @@
     document.getElementById(resultId).innerHTML = `<div style="text-align:center; color:#999; padding:15px;">불러오는 중입니다...</div>`;
     gsRun('getPhysPrepRanking', eventId, mode, currentUser.token).then(function(res) {
       document.getElementById(resultId).innerHTML = physPrepBuildRankingTableHtml(res);
+    });
+  }
+
+  // 체육교사가 관리자 화면에서 만든 배점표를 학생 화면에서는 조회만 할 수 있게 보여준다.
+  function physPrepBuildScoreTableViewHtml(res, ev) {
+    if (!res.success) return `<div style="color:red; text-align:center; padding:10px;">${escapeHtml(res.message)}</div>`;
+    if (!res.list || res.list.length === 0) return `<div style="color:#999; text-align:center; padding:10px;">아직 등록된 배점표가 없습니다.</div>`;
+    const unit = ev ? ev.unit : '';
+    const lb = physPrepBoundaryLabels_(ev ? ev.direction : 'HIGH');
+    const rows = res.list.map(r => {
+      const hasLower = r.lower !== '' && r.lower !== null && r.lower !== undefined;
+      const hasUpper = r.upper !== '' && r.upper !== null && r.upper !== undefined;
+      let rangeTxt;
+      if (hasLower && hasUpper) rangeTxt = `${r.lower}${unit} ${lb.lowerLabel} ~ ${r.upper}${unit} ${lb.upperLabel}`;
+      else if (hasLower) rangeTxt = `${r.lower}${unit} ${lb.lowerLabel}`;
+      else rangeTxt = `${r.upper}${unit} ${lb.upperLabel}`;
+      return `<tr style="border-bottom:1px solid #eee;"><td style="padding:8px;">${escapeHtml(rangeTxt)}</td><td style="padding:8px; font-weight:bold; color:#6a1b9a;">${r.score}점</td></tr>`;
+    }).join('');
+    return `<div style="overflow-x:auto;"><table style="width:100%; border-collapse:collapse; text-align:center; font-size:0.95em;"><thead><tr style="background:#f3e5f5; border-bottom:2px solid #ccc;"><th style="padding:8px;">기록 구간</th><th style="padding:8px;">점수</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+
+  let physPrepScoreTableViewEventId = null;
+
+  // 확인 후에는 다시 접어둘 수 있도록 버튼 하나로 보기/접기를 겸한다. 같은 종목을 이미
+  // 펼쳐본 상태면 서버를 다시 부르지 않고 그냥 접기만 한다.
+  function physPrepLoadScoreTableView() {
+    const eventId = document.getElementById('physprep-scoretable-view-event').value;
+    if (!eventId) { showAlert('종목을 선택하세요.'); return; }
+    const resultEl = document.getElementById('physprep-scoretable-view-result');
+    const btn = document.getElementById('physprep-scoretable-view-btn');
+    if (!resultEl.classList.contains('hidden') && physPrepScoreTableViewEventId === eventId) {
+      resultEl.classList.add('hidden');
+      btn.innerText = '보기';
+      return;
+    }
+    const ev = physPrepEventsCache.find(e => e.id === eventId);
+    resultEl.classList.remove('hidden');
+    resultEl.innerHTML = `<div style="text-align:center; color:#999; padding:15px;">불러오는 중입니다...</div>`;
+    gsRun('getPhysPrepScoreTable', eventId, currentUser.token).then(function(res) {
+      physPrepScoreTableViewEventId = eventId;
+      resultEl.innerHTML = physPrepBuildScoreTableViewHtml(res, ev);
+      btn.innerText = '접기';
     });
   }
 
@@ -153,6 +196,8 @@
       }
       html += `</div>`;
     }
+
+    html += `<div class="card" style="border-top:5px solid #6a1b9a;"><h3 style="margin-top:0; color:#4a148c;">🎯 종목별 배점표 보기</h3><p style="font-size:0.85em; color:#888; margin-top:-8px;">기록 구간별로 몇 점이 부여되는지 확인할 수 있습니다.</p><div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:15px;"><select id="physprep-scoretable-view-event" class="input-field" style="flex:1; min-width:140px; margin:0;">${physPrepEventsCache.map(e => `<option value="${e.id}">${escapeHtml(e.name)} (${escapeHtml(e.unit)})</option>`).join('') || '<option value="">등록된 종목이 없습니다</option>'}</select><button class="btn-primary" id="physprep-scoretable-view-btn" onclick="physPrepLoadScoreTableView()" style="flex:1; min-width:90px; margin:0; background:#6a1b9a;">보기</button></div><div id="physprep-scoretable-view-result" class="hidden"></div></div>`;
 
     html += `<div class="card" style="border-top:5px solid #6a1b9a;"><h3 style="margin-top:0; color:#4a148c;">🏆 종목별 랭킹 조회</h3><p style="font-size:0.85em; color:#888; margin-top:-8px;">3·6·9월 공식측정 기록만 랭킹에 반영됩니다.</p><div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:15px;"><select id="physprep-rank-event" class="input-field" style="flex:1; min-width:140px; margin:0;">${physPrepEventsCache.map(e => `<option value="${e.id}">${escapeHtml(e.name)}</option>`).join('') || '<option value="">등록된 종목이 없습니다</option>'}</select><select id="physprep-rank-mode" class="input-field" style="flex:1; min-width:140px; margin:0;" onchange="physPrepToggleRankYear('physprep-rank-mode','physprep-rank-year')"><option value="all">역대 전체기간</option><option value="year">연도별</option><option value="window:3">최근 3년</option><option value="window:5">최근 5년</option></select><select id="physprep-rank-year" class="input-field hidden" style="flex:1; min-width:100px; margin:0;"></select><button class="btn-primary" onclick="physPrepLoadRanking('physprep-rank-event','physprep-rank-mode','physprep-rank-year','physprep-rank-result')" style="flex:1; min-width:90px; margin:0; background:#6a1b9a;">조회</button></div><div id="physprep-rank-result"></div></div>`;
 
@@ -320,25 +365,109 @@
     lowBtn.style.color = dir === 'LOW' ? 'white' : '#d32f2f';
   }
 
+  // -------------------------------------------------------------------------
+  // 관리자 - 종목 그룹 관리 (그룹 안에서 상위 N개만 총점에 반영)
+  // -------------------------------------------------------------------------
+  function loadPhysPrepGroupsAdmin() {
+    return gsRun('getPhysPrepGroups', currentUser.token).then(function(res) {
+      physPrepGroupsCache = res.success ? res.list : [];
+      renderPhysPrepGroupsTable();
+      renderPhysPrepEventGroupSelect();
+    });
+  }
+
+  function renderPhysPrepGroupsTable() {
+    const tbody = document.getElementById('physprep-groups-tbody');
+    if (!tbody) return;
+    if (physPrepGroupsCache.length === 0) { tbody.innerHTML = `<tr><td colspan="3" style="padding:15px; color:#999;">등록된 그룹이 없습니다. 그룹 없이 등록된 종목은 항상 총점에 포함됩니다.</td></tr>`; return; }
+    tbody.innerHTML = physPrepGroupsCache.map(g => physPrepGroupRowHtml_(g)).join('');
+  }
+
+  function physPrepGroupRowHtml_(g) {
+    const count = physPrepEventsCache.filter(e => e.groupId === g.id).length;
+    return `<tr id="physprep-group-row-${g.id}" style="border-bottom:1px solid #eee;">
+      <td style="padding:8px; font-weight:bold;">${escapeHtml(g.name)}</td>
+      <td style="padding:8px;">${g.pickCount}개 선택 <span style="color:#999; font-size:0.85em;">(소속 종목 ${count}개)</span></td>
+      <td style="padding:8px; white-space:nowrap;">
+        <button class="btn-small" style="background:#607d8b; margin-bottom:4px;" onclick="physPrepStartEditGroup('${g.id}')">수정</button>
+        <button class="btn-small" style="background:#d32f2f;" onclick="physPrepRemoveGroupNow('${g.id}')">삭제</button>
+      </td>
+    </tr>`;
+  }
+
+  function renderPhysPrepEventGroupSelect() {
+    const sel = document.getElementById('physprep-event-group');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">그룹 없음(항상 포함)</option>' + physPrepGroupsCache.map(g => `<option value="${g.id}">${escapeHtml(g.name)} (${g.pickCount}개 선택)</option>`).join('');
+  }
+
+  function physPrepAddGroup() {
+    const name = document.getElementById('physprep-group-name').value.trim();
+    const pickCount = document.getElementById('physprep-group-pickcount').value;
+    if (!name) { showAlert('그룹명을 입력하세요.'); return; }
+    gsRun('addPhysPrepGroup', name, pickCount, currentUser.token).then(function(res) {
+      showAlert(res.message);
+      if (res.success) { document.getElementById('physprep-group-name').value = ''; document.getElementById('physprep-group-pickcount').value = ''; loadPhysPrepEventsAdmin(); }
+    });
+  }
+
+  function physPrepStartEditGroup(groupId) {
+    const g = physPrepGroupsCache.find(x => x.id === groupId);
+    if (!g) return;
+    const row = document.getElementById(`physprep-group-row-${groupId}`);
+    if (!row) return;
+    row.innerHTML = `
+      <td style="padding:6px;"><input type="text" id="physprep-edit-group-name-${groupId}" class="input-field" value="${escapeHtml(g.name)}" style="margin:0;"></td>
+      <td style="padding:6px;"><input type="number" id="physprep-edit-group-pickcount-${groupId}" class="input-field" value="${g.pickCount}" style="margin:0;"></td>
+      <td style="padding:6px; white-space:nowrap;">
+        <button class="btn-small" style="background:#2e7d32; margin-bottom:4px;" onclick="physPrepSaveEditGroup('${groupId}')">저장</button>
+        <button class="btn-small" style="background:#999;" onclick="loadPhysPrepEventsAdmin()">취소</button>
+      </td>`;
+  }
+
+  function physPrepSaveEditGroup(groupId) {
+    const name = document.getElementById(`physprep-edit-group-name-${groupId}`).value.trim();
+    const pickCount = document.getElementById(`physprep-edit-group-pickcount-${groupId}`).value;
+    if (!name) { showAlert('그룹명을 입력하세요.'); return; }
+    gsRun('updatePhysPrepGroup', groupId, name, pickCount, currentUser.token).then(function(res) {
+      showAlert(res.message);
+      if (res.success) loadPhysPrepEventsAdmin();
+    });
+  }
+
+  function physPrepRemoveGroupNow(groupId) {
+    showConfirm('이 그룹을 삭제하시겠습니까?<br>소속된 종목들은 그룹 없음(항상 포함) 상태로 바뀝니다.', function() {
+      gsRun('removePhysPrepGroup', groupId, currentUser.token).then(function(res) { showAlert(res.message); if (res.success) loadPhysPrepEventsAdmin(); });
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // 관리자 - 종목 관리
+  // -------------------------------------------------------------------------
   function loadPhysPrepEventsAdmin() {
     const tbody = document.getElementById('physprep-events-tbody');
-    tbody.innerHTML = `<tr><td colspan="5" style="padding:20px; color:#999;">불러오는 중입니다...</td></tr>`;
-    gsRun('getPhysPrepEvents', currentUser.token).then(function(res) {
-      physPrepEventsCache = res.success ? res.list : [];
-      if (physPrepEventsCache.length === 0) { tbody.innerHTML = `<tr><td colspan="5" style="padding:20px; color:#999;">등록된 종목이 없습니다. 위에서 새 종목을 등록하세요.</td></tr>`; return; }
-      const maxSum = physPrepEventsCache.reduce((s, e) => s + (e.maxScore || 0), 0);
-      tbody.innerHTML = '';
-      physPrepEventsCache.forEach(e => { tbody.innerHTML += physPrepEventRowHtml_(e); });
-      tbody.innerHTML += `<tr><td colspan="5" style="padding:8px; color:#888; font-size:0.85em;">종목 만점 합계: <b style="color:${maxSum === 1000 ? '#2e7d32' : '#e65100'};">${maxSum}점</b> (1000점이 되도록 배분하는 것을 권장합니다)</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" style="padding:20px; color:#999;">불러오는 중입니다...</td></tr>`;
+    loadPhysPrepGroupsAdmin().then(function() {
+      gsRun('getPhysPrepEvents', currentUser.token).then(function(res) {
+        physPrepEventsCache = res.success ? res.list : [];
+        renderPhysPrepGroupsTable(); // 그룹별 소속 종목 개수 표시를 최신 종목 목록 기준으로 갱신
+        if (physPrepEventsCache.length === 0) { tbody.innerHTML = `<tr><td colspan="6" style="padding:20px; color:#999;">등록된 종목이 없습니다. 위에서 새 종목을 등록하세요.</td></tr>`; return; }
+        const maxSum = physPrepEventsCache.reduce((s, e) => s + (e.maxScore || 0), 0);
+        tbody.innerHTML = '';
+        physPrepEventsCache.forEach(e => { tbody.innerHTML += physPrepEventRowHtml_(e); });
+        tbody.innerHTML += `<tr><td colspan="6" style="padding:8px; color:#888; font-size:0.85em;">종목 만점 합계: <b style="color:${maxSum === 1000 ? '#2e7d32' : '#e65100'};">${maxSum}점</b> (1000점이 되도록 배분하는 것을 권장합니다)</td></tr>`;
+      });
     });
   }
 
   function physPrepEventRowHtml_(e) {
+    const g = physPrepGroupsCache.find(x => x.id === e.groupId);
     return `<tr id="physprep-event-row-${e.id}" style="border-bottom:1px solid #eee;">
       <td style="padding:8px; font-weight:bold;">${escapeHtml(e.name)}</td>
       <td style="padding:8px;">${escapeHtml(e.unit)}</td>
       <td style="padding:8px;">${physPrepDirectionIcon_(e.direction)}</td>
       <td style="padding:8px; font-weight:bold; color:#6a1b9a;">${e.maxScore || 0}점</td>
+      <td style="padding:8px; color:#555;">${g ? escapeHtml(g.name) : '-'}</td>
       <td style="padding:8px; white-space:nowrap;">
         <button class="btn-small" style="background:#6a1b9a; margin-bottom:4px;" onclick="physPrepOpenScoreTableEditor('${e.id}')">배점표</button>
         <button class="btn-small" style="background:#607d8b; margin-bottom:4px;" onclick="physPrepStartEditEvent('${e.id}')">수정</button>
@@ -352,10 +481,11 @@
     const unit = document.getElementById('physprep-event-unit').value.trim();
     const direction = document.getElementById('physprep-event-direction').value;
     const maxScore = document.getElementById('physprep-event-maxscore').value;
+    const groupId = document.getElementById('physprep-event-group').value;
     if (!name) { showAlert('종목명을 입력하세요.'); return; }
-    gsRun('addPhysPrepEvent', name, unit, direction, maxScore, currentUser.token).then(function(res) {
+    gsRun('addPhysPrepEvent', name, unit, direction, maxScore, groupId, currentUser.token).then(function(res) {
       showAlert(res.message);
-      if (res.success) { document.getElementById('physprep-event-name').value = ''; document.getElementById('physprep-event-unit').value = ''; document.getElementById('physprep-event-maxscore').value = ''; physPrepSetDirection('HIGH'); loadPhysPrepEventsAdmin(); }
+      if (res.success) { document.getElementById('physprep-event-name').value = ''; document.getElementById('physprep-event-unit').value = ''; document.getElementById('physprep-event-maxscore').value = ''; document.getElementById('physprep-event-group').value = ''; physPrepSetDirection('HIGH'); loadPhysPrepEventsAdmin(); }
     });
   }
 
@@ -384,6 +514,7 @@
         </div>
       </td>
       <td style="padding:6px;"><input type="number" id="physprep-edit-maxscore-${eventId}" class="input-field" value="${ev.maxScore || 0}" style="margin:0;"></td>
+      <td style="padding:6px;"><select id="physprep-edit-group-${eventId}" class="input-field" style="margin:0;"><option value="">없음</option>${physPrepGroupsCache.map(g => `<option value="${g.id}" ${g.id === ev.groupId ? 'selected' : ''}>${escapeHtml(g.name)}</option>`).join('')}</select></td>
       <td style="padding:6px; white-space:nowrap;">
         <button class="btn-small" style="background:#2e7d32; margin-bottom:4px;" onclick="physPrepSaveEditEvent('${eventId}')">저장</button>
         <button class="btn-small" style="background:#999;" onclick="loadPhysPrepEventsAdmin()">취소</button>
@@ -405,8 +536,9 @@
     const unit = document.getElementById(`physprep-edit-unit-${eventId}`).value.trim();
     const direction = document.getElementById(`physprep-edit-direction-${eventId}`).value;
     const maxScore = document.getElementById(`physprep-edit-maxscore-${eventId}`).value;
+    const groupId = document.getElementById(`physprep-edit-group-${eventId}`).value;
     if (!name) { showAlert('종목명을 입력하세요.'); return; }
-    gsRun('updatePhysPrepEvent', eventId, name, unit, direction, maxScore, ev ? ev.active : true, currentUser.token).then(function(res) {
+    gsRun('updatePhysPrepEvent', eventId, name, unit, direction, maxScore, ev ? ev.active : true, groupId, currentUser.token).then(function(res) {
       showAlert(res.message);
       if (res.success) loadPhysPrepEventsAdmin();
     });
@@ -422,43 +554,117 @@
     container.innerHTML = `<div class="card" style="border-top:5px solid #6a1b9a; background:#f7f2fa;">
       <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
         <h4 style="margin:0; color:#4a148c;">🎯 ${escapeHtml(ev.name)} 배점표 ${physPrepDirectionIcon_(ev.direction)} (만점 ${ev.maxScore || 0}점)</h4>
-        <div style="display:flex; gap:6px; flex-shrink:0;">
+        <div style="display:flex; gap:6px; flex-shrink:0; flex-wrap:wrap;">
+          <button class="btn-small" style="padding:6px 10px; font-size:0.78em; background:#8e24aa;" onclick="physPrepDefaultSetupScoreRows('${eventId}')">🧱 기본 세팅(30~100점)</button>
           <button class="btn-small" style="padding:6px 10px; font-size:0.78em; background:#6a1b9a;" onclick="physPrepAddScoreRow('${eventId}')">➕ 행 추가</button>
           <button class="btn-small" style="padding:6px 10px; font-size:0.78em; background:#2e7d32;" onclick="physPrepSaveScoreTable('${eventId}')">💾 저장</button>
           <button class="btn-small" style="padding:6px 10px; font-size:0.78em; background:#999;" onclick="document.getElementById('physprep-scoretable-editor').innerHTML=''">닫기</button>
         </div>
       </div>
-      <p style="font-size:0.82em; color:#888; margin:6px 0 12px;">기록이 [이상]부터 [미만]까지 구간에 들면 해당 점수를 받습니다. 이상/미만 중 하나는 비워둘 수 있습니다 — 예: 최고 구간은 미만 칸을 비우고(300 이상), 최저 구간은 이상 칸을 비웁니다(200 미만). 행을 자유롭게 추가·수정·삭제한 뒤 저장 버튼을 눌러야 반영됩니다.</p>
+      <p style="font-size:0.82em; color:#888; margin:6px 0 12px;">${ev.direction === 'LOW'
+        ? '기록이 낮을수록 높은 점수를 받는 종목입니다. [초과]부터 [이하]까지 구간에 들면 해당 점수를 받습니다 — 예: 최고 구간은 초과 칸을 비우고(13.0 이하), 최저 구간은 이하 칸을 비웁니다(20.0 초과). 한 행에 이하를 입력하면 바로 아래(다음으로 낮은 점수) 행의 초과 칸에 자동으로 채워지고, 반대로 초과를 입력하면 바로 위(다음으로 높은 점수) 행의 이하 칸에 자동으로 채워집니다.'
+        : '기록이 높을수록 높은 점수를 받는 종목입니다. [이상]부터 [미만]까지 구간에 들면 해당 점수를 받습니다 — 예: 최고 구간은 미만 칸을 비우고(300 이상), 최저 구간은 이상 칸을 비웁니다(200 미만). 한 행에 이상을 입력하면 바로 아래(다음으로 낮은 점수) 행의 미만 칸에 자동으로 채워지고, 반대로 미만을 입력하면 바로 위(다음으로 높은 점수) 행의 이상 칸에 자동으로 채워집니다.'
+      } 행을 자유롭게 추가·수정·삭제한 뒤 저장 버튼을 눌러야 반영됩니다.</p>
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; background:white; border:1px solid #e1bee7; border-radius:8px; padding:10px; margin-bottom:12px;">
+        <span style="font-size:0.85em; color:#4a148c; font-weight:bold; white-space:nowrap;">📏 간격 일괄 설정:</span>
+        <input type="number" step="any" id="physprep-interval-start-${eventId}" class="input-field" placeholder="${ev.direction === 'LOW' ? '최고점 기준값(이하)' : '최고점 기준값(이상)'}" style="width:130px; margin:0;">
+        <input type="number" step="any" id="physprep-interval-step-${eventId}" class="input-field" placeholder="간격(예: 0.6)" style="width:110px; margin:0;">
+        <button class="btn-small" style="background:#6a1b9a; padding:8px 14px; font-size:0.85em;" onclick="physPrepApplyIntervalSetup('${eventId}')">일괄 적용</button>
+      </div>
       <div id="physprep-score-rows-${eventId}"><div style="text-align:center; color:#999; padding:10px;">불러오는 중입니다...</div></div>
     </div>`;
     physPrepLoadScoreRows(eventId, ev.unit);
   }
 
-  function physPrepScoreRowHtml_(unit, lower, upper, score) {
+  // 기록이 높을수록 좋은 종목(HIGH)은 하한="이상"/상한="미만", 기록이 낮을수록 좋은
+  // 종목(LOW, 예: 달리기 기록)은 반대로 하한="초과"/상한="이하"로 라벨을 바꿔서 보여준다.
+  function physPrepBoundaryLabels_(direction) {
+    return direction === 'LOW' ? { lowerLabel: '초과', upperLabel: '이하' } : { lowerLabel: '이상', upperLabel: '미만' };
+  }
+
+  function physPrepScoreRowHtml_(unit, lower, upper, score, direction) {
     const lv = (lower !== '' && lower !== null && lower !== undefined) ? escapeHtml(lower) : '';
     const uv = (upper !== '' && upper !== null && upper !== undefined) ? escapeHtml(upper) : '';
     const sv = (score !== '' && score !== null && score !== undefined) ? escapeHtml(score) : '';
+    const lb = physPrepBoundaryLabels_(direction);
     return `<div class="physprep-score-row" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:6px;">
-      <div style="display:flex; align-items:center; gap:4px;"><input type="number" class="input-field physprep-score-lower" placeholder="하한(${escapeHtml(unit)})" value="${lv}" style="width:100px; margin:0;"><span style="font-size:0.8em; color:#666; white-space:nowrap;">이상</span></div>
-      <div style="display:flex; align-items:center; gap:4px;"><input type="number" class="input-field physprep-score-upper" placeholder="상한(${escapeHtml(unit)})" value="${uv}" style="width:100px; margin:0;"><span style="font-size:0.8em; color:#666; white-space:nowrap;">미만</span></div>
+      <div style="display:flex; align-items:center; gap:4px;"><input type="number" class="input-field physprep-score-lower" value="${lv}" style="width:100px; margin:0;" oninput="physPrepSyncScoreBoundary_(this, 'lower', '${direction}')"><span style="font-size:0.8em; color:#666; white-space:nowrap;">${lb.lowerLabel}</span></div>
+      <div style="display:flex; align-items:center; gap:4px;"><input type="number" class="input-field physprep-score-upper" value="${uv}" style="width:100px; margin:0;" oninput="physPrepSyncScoreBoundary_(this, 'upper', '${direction}')"><span style="font-size:0.8em; color:#666; white-space:nowrap;">${lb.upperLabel}</span></div>
       <input type="number" class="input-field physprep-score-value" placeholder="점수" value="${sv}" style="flex:1; min-width:70px; margin:0;">
       <button class="btn-small" style="background:#d32f2f; padding:8px 12px;" onclick="this.closest('.physprep-score-row').remove()">삭제</button>
     </div>`;
   }
 
+  // 점수 내림차순으로 쌓인 행들은 서로 인접한 구간이 경계값을 공유한다. HIGH 종목은
+  // 위 행의 하한(이상)이 아래 행의 상한(미만)과 같고, LOW 종목은 반대로 위 행의
+  // 상한(이하)이 아래 행의 하한(초과)과 같다 - 한쪽을 입력하면 인접 행의 반대쪽 칸을
+  // 자동으로 채워줘서 매 행마다 같은 숫자를 두 번씩 입력하지 않아도 되게 한다.
+  function physPrepSyncScoreBoundary_(input, kind, direction) {
+    const row = input.closest('.physprep-score-row');
+    if (!row) return;
+    const propagateDown = (direction === 'LOW') ? (kind === 'upper') : (kind === 'lower');
+    const targetRow = propagateDown ? row.nextElementSibling : row.previousElementSibling;
+    if (!targetRow || !targetRow.classList.contains('physprep-score-row')) return;
+    const targetField = kind === 'lower' ? 'upper' : 'lower';
+    targetRow.querySelector('.physprep-score-' + targetField).value = input.value;
+  }
+
+  // 최고점 기준값에서 일정 간격씩 빼거나(HIGH) 더하며(LOW) 모든 행의 이상/미만(또는
+  // 초과/이하)을 한 번에 채운다 - 행마다 같은 간격을 직접 계산해 타이핑하지 않아도 된다.
+  // 예: 기준값 32, 간격 0.6, HIGH면 100점=32 이상, 98점=31.4 이상~32 미만, 96점=30.8 이상~31.4 미만 ...
+  function physPrepApplyIntervalSetup(eventId) {
+    const ev = physPrepEventsCache.find(e => e.id === eventId);
+    const direction = ev ? ev.direction : 'HIGH';
+    const start = parseFloat(document.getElementById(`physprep-interval-start-${eventId}`).value);
+    const step = parseFloat(document.getElementById(`physprep-interval-step-${eventId}`).value);
+    if (isNaN(start) || isNaN(step) || step <= 0) { showAlert('최고점 기준값과 간격(0보다 큰 수)을 입력하세요.'); return; }
+    const rows = document.querySelectorAll(`#physprep-score-rows-${eventId} .physprep-score-row`);
+    if (rows.length === 0) { showAlert('먼저 점수 행을 만들어주세요(기본 세팅 또는 행 추가).'); return; }
+    showConfirm(`현재 입력된 구간 값을 모두 지우고, ${rows.length}개 행에 ${step} 간격으로 일괄 적용합니다.<br>계속할까요?`, function() {
+      const round = n => Math.round(n * 1000) / 1000; // 부동소수점 오차 방지
+      const n = rows.length;
+      const boundaries = [];
+      for (let i = 0; i < n; i++) boundaries.push(round(direction === 'LOW' ? start + i * step : start - i * step));
+      rows.forEach((row, i) => {
+        const lowerInput = row.querySelector('.physprep-score-lower');
+        const upperInput = row.querySelector('.physprep-score-upper');
+        if (direction === 'LOW') {
+          lowerInput.value = (i === 0) ? '' : boundaries[i - 1];
+          upperInput.value = (i === n - 1) ? '' : boundaries[i];
+        } else {
+          lowerInput.value = (i === n - 1) ? '' : boundaries[i];
+          upperInput.value = (i === 0) ? '' : boundaries[i - 1];
+        }
+      });
+    });
+  }
+
+  // 30~100점을 2점 간격으로 미리 깔아둔다(구간값은 비워둔 채 점수만 채움) - 교사가
+  // 매번 점수를 직접 타이핑하지 않고 구간값만 채워 넣도록 하기 위한 기본 틀이다.
+  function physPrepDefaultSetupScoreRows(eventId) {
+    const ev = physPrepEventsCache.find(e => e.id === eventId);
+    showConfirm('현재 편집 중인 행을 모두 지우고 30~100점(2점 간격) 기본 틀을 새로 만듭니다.<br>계속할까요?', function() {
+      let html = '';
+      for (let s = 100; s >= 30; s -= 2) html += physPrepScoreRowHtml_(ev ? ev.unit : '', '', '', s, ev ? ev.direction : 'HIGH');
+      document.getElementById(`physprep-score-rows-${eventId}`).innerHTML = html;
+    });
+  }
+
   function physPrepLoadScoreRows(eventId, unit) {
     const container = document.getElementById(`physprep-score-rows-${eventId}`);
     if (!container) return;
+    const ev = physPrepEventsCache.find(e => e.id === eventId);
+    const direction = ev ? ev.direction : 'HIGH';
     gsRun('getPhysPrepScoreTable', eventId, currentUser.token).then(function(res) {
       if (!res.success) { container.innerHTML = `<div style="color:red; text-align:center; padding:10px;">${escapeHtml(res.message)}</div>`; return; }
       if (res.list.length === 0) { container.innerHTML = ''; return; }
-      container.innerHTML = res.list.map(t => physPrepScoreRowHtml_(unit, t.lower, t.upper, t.score)).join('');
+      container.innerHTML = res.list.map(t => physPrepScoreRowHtml_(unit, t.lower, t.upper, t.score, direction)).join('');
     });
   }
 
   function physPrepAddScoreRow(eventId) {
     const ev = physPrepEventsCache.find(e => e.id === eventId);
-    document.getElementById(`physprep-score-rows-${eventId}`).insertAdjacentHTML('beforeend', physPrepScoreRowHtml_(ev ? ev.unit : '', '', '', ''));
+    document.getElementById(`physprep-score-rows-${eventId}`).insertAdjacentHTML('beforeend', physPrepScoreRowHtml_(ev ? ev.unit : '', '', '', '', ev ? ev.direction : 'HIGH'));
   }
 
   function physPrepSaveScoreTable(eventId) {
@@ -469,7 +675,7 @@
       const lower = row.querySelector('.physprep-score-lower').value;
       const upper = row.querySelector('.physprep-score-upper').value;
       const score = row.querySelector('.physprep-score-value').value;
-      if (lower === '' && upper === '') { error = '이상 또는 미만 중 하나는 입력해야 합니다.'; return; }
+      if (lower === '' && upper === '') { error = '구간 값(하한 또는 상한)을 하나 이상 입력해야 합니다.'; return; }
       if (score === '') { error = '점수를 입력하세요.'; return; }
       rows.push({ lower: lower, upper: upper, score: score });
     });

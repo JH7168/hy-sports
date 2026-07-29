@@ -1,17 +1,29 @@
 // ==========================================================
 // 물품 관리 데이터베이스 (Inventory & Purchase) 로직
 // ==========================================================
-function saveInventoryItem(loc, name, spec, qty, token) {
+function saveInventoryItem(loc, name, content, spec, qty, token) {
   try {
     requirePeTeacher(token);
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     let sheet = ss.getSheetByName('체육물품대장');
     if (!sheet) return { success: false, message: "물품대장 시트가 존재하지 않습니다." };
-    sheet.appendRow([loc, name, spec, qty]);
+    sheet.appendRow([loc, name, content, spec, qty]);
     return { success: true };
   } catch (e) {
     return { success: false, message: e.message };
   }
+}
+
+function updateInventoryItem(rowIndex, loc, name, content, spec, qty, token) {
+  try {
+    requirePeTeacher(token);
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let sheet = ss.getSheetByName('체육물품대장');
+    if (!sheet) return { success: false, message: "물품대장 시트가 존재하지 않습니다." };
+    if (!rowIndex || rowIndex < 2 || rowIndex > sheet.getLastRow()) return { success: false, message: "대상 물품을 찾을 수 없습니다." };
+    sheet.getRange(rowIndex, 1, 1, 5).setValues([[loc, name, content, spec, qty]]);
+    return { success: true };
+  } catch (e) { return { success: false, message: e.message }; }
 }
 
 function getInventoryData(location, token) {
@@ -26,7 +38,7 @@ function getInventoryData(location, token) {
       let rowLoc = data[i][0];
       if (!rowLoc) continue;
       if (location === '전체' || rowLoc === location) {
-        result.push({ loc: rowLoc, name: data[i][1], spec: data[i][2], qty: data[i][3] });
+        result.push({ rowIndex: i + 1, loc: rowLoc, name: data[i][1], content: data[i][2], spec: data[i][3], qty: data[i][4] });
       }
     }
     return result;

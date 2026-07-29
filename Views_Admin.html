@@ -105,7 +105,8 @@
               <option value="직접입력">직접 입력...</option>
             </select>
             <input type="text" id="add-inv-custom-loc" class="input-field hidden" placeholder="장소명 직접 입력" style="margin:0; flex:1; min-width:120px;">
-            <input type="text" id="add-inv-name" class="input-field" placeholder="물품명(내용)" style="margin:0; flex:2; min-width:120px;">
+            <input type="text" id="add-inv-name" class="input-field" placeholder="물품명" style="margin:0; flex:1.3; min-width:100px;">
+            <input type="text" id="add-inv-content" class="input-field" placeholder="내용" style="margin:0; flex:1.3; min-width:100px;">
             <input type="text" id="add-inv-spec" class="input-field" placeholder="규격" style="margin:0; flex:1; min-width:80px;">
             <input type="number" id="add-inv-qty" class="input-field" placeholder="수량" style="margin:0; flex:1; min-width:70px;">
             <button class="btn-primary" onclick="addInventoryItem()" style="margin:0; flex:1; min-width:90px; background:#4caf50; padding:12px;">등록</button>
@@ -122,10 +123,11 @@
           </select>
           <button class="btn-small" onclick="loadInventory()" style="background:#4caf50; margin:0; padding:12px;">새로고침</button>
         </div>
+        <div id="inventory-summary-container" style="margin-bottom:15px;"></div>
         <div id="inventory-list-container" style="overflow-x:auto;">
           <table style="width:100%; border-collapse:collapse; text-align:center; font-size:0.95em;">
-            <thead><tr style="background:#e8f5e9; border-bottom:2px solid #ccc;"><th style="padding:10px;">장소</th><th style="padding:10px;">물품명 (내용)</th><th style="padding:10px;">규격</th><th style="padding:10px;">수량</th></tr></thead>
-            <tbody id="inventory-tbody"><tr><td colspan="4" style="padding:20px; color:#999;">데이터를 불러오는 중입니다...</td></tr></tbody>
+            <thead><tr style="background:#e8f5e9; border-bottom:2px solid #ccc;"><th style="padding:10px;">장소</th><th style="padding:10px;">물품명</th><th style="padding:10px;">내용</th><th style="padding:10px;">규격</th><th style="padding:10px;">수량</th><th style="padding:10px;">관리</th></tr></thead>
+            <tbody id="inventory-tbody"><tr><td colspan="6" style="padding:20px; color:#999;">데이터를 불러오는 중입니다...</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -203,6 +205,22 @@
       </div>
 
       <div class="card" style="border-top: 5px solid #6a1b9a; margin-bottom: 20px;">
+        <h3 style="margin-top:0; color:#4a148c;">🗂️ 종목 그룹 관리</h3>
+        <p style="font-size:0.9em; color:#666; margin-bottom:15px;">여러 종목을 그룹으로 묶고 그중 몇 개까지 총점에 반영할지 정할 수 있습니다 — 예: '선택A' 그룹에서 2개 선택으로 설정하면, 그 그룹에 속한 종목들 중 기록(점수)이 좋은 상위 2개만 자동으로 총점에 반영됩니다. 그룹에 속하지 않은 종목은 항상 총점에 포함됩니다.</p>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; background:#f0f2f5; padding:15px; border-radius:8px; margin-bottom:15px;">
+          <input type="text" id="physprep-group-name" class="input-field" placeholder="그룹명 (예: 선택A)" style="flex:2; min-width:120px; margin:0;">
+          <input type="number" id="physprep-group-pickcount" class="input-field" placeholder="선택 개수 (예: 2)" style="flex:1; min-width:110px; margin:0;">
+          <button class="btn-primary" onclick="physPrepAddGroup()" style="margin:0; flex:1; min-width:90px; background:#6a1b9a;">그룹 등록</button>
+        </div>
+        <div style="overflow-x:auto;">
+          <table style="width:100%; border-collapse:collapse; text-align:center; font-size:0.95em;">
+            <thead><tr style="background:#f3e5f5; border-bottom:2px solid #ccc;"><th style="padding:10px;">그룹명</th><th style="padding:10px;">선택 개수</th><th style="padding:10px;">관리</th></tr></thead>
+            <tbody id="physprep-groups-tbody"><tr><td colspan="3" style="padding:20px; color:#999;">불러오는 중입니다...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card" style="border-top: 5px solid #6a1b9a; margin-bottom: 20px;">
         <h3 style="margin-top:0; color:#4a148c;">🏷️ 측정 종목 관리</h3>
         <p style="font-size:0.9em; color:#666; margin-bottom:15px;">종목은 나중에 얼마든지 추가할 수 있습니다. 방향(<span style="color:#1565c0;">▲파란색=클수록 좋음</span> / <span style="color:#d32f2f;">▼빨간색=작을수록 좋음</span>)을 정확히 선택해야 랭킹이 올바르게 정렬됩니다. 만점은 전체 종목 합이 1000점이 되도록 배분하고, 배점표(기록구간→점수)를 만들어야 총점 계산에 반영됩니다.</p>
         <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; background:#f0f2f5; padding:15px; border-radius:8px; margin-bottom:15px;">
@@ -214,12 +232,13 @@
             <button type="button" id="physprep-event-dir-low" onclick="physPrepSetDirection('LOW')" style="padding:10px 14px; border:none; border-radius:8px; font-size:1.15em; cursor:pointer; background:#ffebee; color:#d32f2f;" title="기록이 작을수록 좋음">▼</button>
           </div>
           <input type="number" id="physprep-event-maxscore" class="input-field" placeholder="만점(점)" style="flex:1; min-width:90px; margin:0;">
+          <select id="physprep-event-group" class="input-field" style="flex:1.3; min-width:140px; margin:0;"><option value="">그룹 없음(항상 포함)</option></select>
           <button class="btn-primary" onclick="physPrepAddEvent()" style="margin:0; flex:1; min-width:90px; background:#6a1b9a;">종목 등록</button>
         </div>
         <div style="overflow-x:auto;">
           <table style="width:100%; border-collapse:collapse; text-align:center; font-size:0.95em;">
-            <thead><tr style="background:#f3e5f5; border-bottom:2px solid #ccc;"><th style="padding:10px;">종목명</th><th style="padding:10px;">단위</th><th style="padding:10px;">방향</th><th style="padding:10px;">만점</th><th style="padding:10px;">관리</th></tr></thead>
-            <tbody id="physprep-events-tbody"><tr><td colspan="5" style="padding:20px; color:#999;">불러오는 중입니다...</td></tr></tbody>
+            <thead><tr style="background:#f3e5f5; border-bottom:2px solid #ccc;"><th style="padding:10px;">종목명</th><th style="padding:10px;">단위</th><th style="padding:10px;">방향</th><th style="padding:10px;">만점</th><th style="padding:10px;">그룹</th><th style="padding:10px;">관리</th></tr></thead>
+            <tbody id="physprep-events-tbody"><tr><td colspan="6" style="padding:20px; color:#999;">불러오는 중입니다...</td></tr></tbody>
           </table>
         </div>
         <div id="physprep-scoretable-editor" style="margin-top:15px;"></div>

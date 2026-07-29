@@ -10,7 +10,7 @@ function include(filename) { return HtmlService.createTemplateFromFile(filename)
 // 한 번만 맞춰두면 되므로 스크립트 속성에 완료 버전을 기록해두고 그 이후로는 건너뛴다.
 // 이후 시트/컬럼 구조를 바꾸는 코드를 추가할 때는 이 버전 숫자를 올려야 기존
 // 스프레드시트에도 그 변경(마이그레이션)이 한 번 더 반영된다.
-const SETUP_VERSION = '1';
+const SETUP_VERSION = '3';
 
 function ensureSystemSheetsSetup_() {
   const props = PropertiesService.getScriptProperties();
@@ -59,8 +59,27 @@ function setupSystemSheets() {
   let inventorySheet = ss.getSheetByName('체육물품대장');
   if (!inventorySheet) {
     inventorySheet = ss.insertSheet('체육물품대장');
-    inventorySheet.appendRow(['장소', '물품명', '규격', '수량']);
-    inventorySheet.getRange("A1:D1").setBackground("#4caf50").setFontColor("white").setFontWeight("bold");
+    inventorySheet.appendRow(['장소', '물품명', '내용', '규격', '수량']);
+    inventorySheet.getRange("A1:E1").setBackground("#4caf50").setFontColor("white").setFontWeight("bold");
+  } else if (inventorySheet.getRange(1, 3).getValue() !== '내용') {
+    // 예전에는 물품명 칸에 "물품명(내용)"처럼 괄호로 합쳐서 적었다. 내용 칸을 새로 끼워넣으면서
+    // 기존 값도 그 괄호 패턴이면 자동으로 분리해준다(패턴이 아니면 물품명 칸에 그대로 둔다).
+    inventorySheet.insertColumnAfter(2);
+    inventorySheet.getRange(1, 3).setValue('내용');
+    inventorySheet.getRange("A1:E1").setBackground("#4caf50").setFontColor("white").setFontWeight("bold");
+    const lastRow = inventorySheet.getLastRow();
+    if (lastRow > 1) {
+      const names = inventorySheet.getRange(2, 2, lastRow - 1, 1).getValues();
+      const newNames = []; const contents = [];
+      names.forEach(r => {
+        const raw = (r[0] || '').toString().trim();
+        const match = raw.match(/^(.+?)\(([^()]+)\)$/);
+        if (match) { newNames.push([match[1].trim()]); contents.push([match[2].trim()]); }
+        else { newNames.push([raw]); contents.push(['']); }
+      });
+      inventorySheet.getRange(2, 2, newNames.length, 1).setValues(newNames);
+      inventorySheet.getRange(2, 3, contents.length, 1).setValues(contents);
+    }
   }
 
   // 물품구입신청 시트 세팅

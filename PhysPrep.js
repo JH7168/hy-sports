@@ -12,7 +12,8 @@ function setupPhysPrepSheets() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheets = {
     '체대입시반_명단': ['학번', '이름', '학년', '등록일'],
-    '체대입시반_종목': ['종목ID', '종목명', '단위', '방향', '사용여부', '등록일', '만점'],
+    '체대입시반_종목': ['종목ID', '종목명', '단위', '방향', '사용여부', '등록일', '만점', '그룹ID'],
+    '체대입시반_그룹': ['그룹ID', '그룹명', '선택개수'],
     '체대입시반_공식기록': ['학번', '이름', '학년', '연도', '회차', '종목ID', '기록값', '입력일시', '입력교사', '환산점수', '만점_스냅샷'],
     '체대입시반_자율기록': ['학번', '이름', '종목ID', '기록값', '입력일시', '측정회차', '기록ID']
   };
@@ -186,7 +187,7 @@ function getPhysPrepRoster(token) {
 // ==========================================================
 // 종목 관리 (체육교사 전용 등록/수정, 조회는 로그인만 하면 가능)
 // ==========================================================
-function addPhysPrepEvent(name, unit, direction, maxScore, token) {
+function addPhysPrepEvent(name, unit, direction, maxScore, groupId, token) {
   try {
     requirePeTeacher(token);
     name = name.toString().trim();
@@ -199,12 +200,12 @@ function addPhysPrepEvent(name, unit, direction, maxScore, token) {
     }
     const eventId = Utilities.getUuid();
     const dateStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
-    sheet.appendRow([eventId, name, (unit || '').toString().trim(), direction === 'LOW' ? 'LOW' : 'HIGH', 'Y', dateStr, parseInt(maxScore, 10) || 0]);
+    sheet.appendRow([eventId, name, (unit || '').toString().trim(), direction === 'LOW' ? 'LOW' : 'HIGH', 'Y', dateStr, parseInt(maxScore, 10) || 0, (groupId || '').toString().trim()]);
     return { success: true, message: "종목이 등록되었습니다." };
   } catch (e) { return { success: false, message: e.message }; }
 }
 
-function updatePhysPrepEvent(eventId, name, unit, direction, maxScore, active, token) {
+function updatePhysPrepEvent(eventId, name, unit, direction, maxScore, active, groupId, token) {
   try {
     requirePeTeacher(token);
     const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -214,6 +215,7 @@ function updatePhysPrepEvent(eventId, name, unit, direction, maxScore, active, t
       if (data[i][0] === eventId) {
         sheet.getRange(i + 1, 2, 1, 4).setValues([[name, unit, direction === 'LOW' ? 'LOW' : 'HIGH', active ? 'Y' : 'N']]);
         sheet.getRange(i + 1, 7).setValue(parseInt(maxScore, 10) || 0);
+        sheet.getRange(i + 1, 8).setValue((groupId || '').toString().trim());
         return { success: true, message: "종목 정보를 수정했습니다." };
       }
     }
@@ -222,7 +224,9 @@ function updatePhysPrepEvent(eventId, name, unit, direction, maxScore, active, t
 }
 
 // 종목명은 예시일 뿐 실제로는 자유롭게 추가되는 목록이라 활성/비활성만 구분해 반환한다.
-// 화면 표시는 종목명 글자수가 긴 것부터, 같은 글자수면 가나다순으로 배열한다.
+// 화면 표시 순서: "필수" 그룹이 맨 위, 그다음 나머지 그룹은 그룹명 가나다순(선택A→선택B→...
+// 순으로 자연히 맞춰짐), 그룹이 없는 종목은 맨 아래. 같은 그룹(또는 미배정끼리) 안에서는
+// 종목명 가나다순으로 나열한다.
 function getPhysPrepEvents(token) {
   try {
     requireSession(token);
@@ -230,11 +234,88 @@ function getPhysPrepEvents(token) {
     const data = ss.getSheetByName('체대입시반_종목').getDataRange().getValues();
     const list = [];
     for (let i = 1; i < data.length; i++) {
-      if (data[i][0]) list.push({ id: data[i][0], name: data[i][1], unit: data[i][2], direction: data[i][3], active: data[i][4] === 'Y', maxScore: parseInt(data[i][6], 10) || 0 });
+      if (data[i][0]) list.push({ id: data[i][0], name: data[i][1], unit: data[i][2], direction: data[i][3], active: data[i][4] === 'Y', maxScore: parseInt(data[i][6], 10) || 0, groupId: data[i][7] || '' });
     }
-    list.sort((a, b) => b.name.length - a.name.length || a.name.localeCompare(b.name, 'ko'));
+
+    const groupsData = ss.getSheetByName('체대입시반_그룹').getDataRange().getValues();
+    const groupName = {};
+    for (let i = 1; i < groupsData.length; i++) { if (groupsData[i][0]) groupName[groupsData[i][0]] = groupsData[i][1]; }
+
+    function groupRank(gid) {
+      if (!gid) return { tier: 2, name: '' };
+      const name = groupName[gid] || '';
+      return { tier: name === '필수' ? 0 : 1, name: name };
+    }
+    list.sort((a, b) => {
+      const ga = groupRank(a.groupId), gb = groupRank(b.groupId);
+      if (ga.tier !== gb.tier) return ga.tier - gb.tier;
+      if (ga.name !== gb.name) return ga.name.localeCompare(gb.name, 'ko');
+      return a.name.localeCompare(b.name, 'ko');
+    });
     return { success: true, list: list };
   } catch (e) { return { success: false, message: e.message, list: [] }; }
+}
+
+// ==========================================================
+// 종목 그룹 관리 (예: "선택A" 그룹에서 N개만 총점에 반영) - 체육교사 전용 설정.
+// 그룹에 속하지 않은 종목은 항상(그룹 크기 1, 선택 1로 취급) 총점에 포함된다.
+// 실제 반영은 getMyPhysPrepScoreSummary에서 회차별로 그룹 안 상위 N개 점수만 합산한다.
+// ==========================================================
+function getPhysPrepGroups(token) {
+  try {
+    requireSession(token);
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('체대입시반_그룹');
+    const data = sheet ? sheet.getDataRange().getValues() : [];
+    const list = [];
+    for (let i = 1; i < data.length; i++) { if (data[i][0]) list.push({ id: data[i][0], name: data[i][1], pickCount: parseInt(data[i][2], 10) || 1 }); }
+    return { success: true, list: list };
+  } catch (e) { return { success: false, message: e.message, list: [] }; }
+}
+
+function addPhysPrepGroup(name, pickCount, token) {
+  try {
+    requirePeTeacher(token);
+    name = (name || '').toString().trim();
+    if (!name) return { success: false, message: "그룹명을 입력하세요." };
+    const pc = parseInt(pickCount, 10);
+    if (isNaN(pc) || pc < 1) return { success: false, message: "선택 개수를 1 이상으로 입력하세요." };
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('체대입시반_그룹');
+    sheet.appendRow([Utilities.getUuid(), name, pc]);
+    return { success: true, message: "그룹이 등록되었습니다." };
+  } catch (e) { return { success: false, message: e.message }; }
+}
+
+function updatePhysPrepGroup(groupId, name, pickCount, token) {
+  try {
+    requirePeTeacher(token);
+    name = (name || '').toString().trim();
+    if (!name) return { success: false, message: "그룹명을 입력하세요." };
+    const pc = parseInt(pickCount, 10);
+    if (isNaN(pc) || pc < 1) return { success: false, message: "선택 개수를 1 이상으로 입력하세요." };
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('체대입시반_그룹');
+    const data = sheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][0] === groupId) { sheet.getRange(i + 1, 1, 1, 3).setValues([[groupId, name, pc]]); return { success: true, message: "그룹 정보를 수정했습니다." }; }
+    }
+    return { success: false, message: "그룹을 찾을 수 없습니다." };
+  } catch (e) { return { success: false, message: e.message }; }
+}
+
+function removePhysPrepGroup(groupId, token) {
+  try {
+    requirePeTeacher(token);
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName('체대입시반_그룹');
+    const data = sheet.getDataRange().getValues();
+    let found = false;
+    for (let i = 1; i < data.length; i++) { if (data[i][0] === groupId) { sheet.deleteRow(i + 1); found = true; break; } }
+    if (!found) return { success: false, message: "그룹을 찾을 수 없습니다." };
+    // 이 그룹에 속해있던 종목은 그룹 소속을 해제한다(미배정 = 항상 총점 포함).
+    const eventSheet = ss.getSheetByName('체대입시반_종목');
+    const eventData = eventSheet.getDataRange().getValues();
+    for (let i = 1; i < eventData.length; i++) { if (eventData[i][7] === groupId) eventSheet.getRange(i + 1, 8).setValue(''); }
+    return { success: true, message: "그룹을 삭제했습니다. 소속되어 있던 종목은 그룹 없음(항상 포함) 상태로 바뀝니다." };
+  } catch (e) { return { success: false, message: e.message }; }
 }
 
 // 종목을 완전히 삭제한다(배점표도 같이 정리). 이미 입력된 측정 기록(공식/자율)은 그대로
@@ -265,11 +346,12 @@ function getPhysPrepEventMeta(eventId) {
 }
 
 // ==========================================================
-// 배점표 관리 (종목별 기록 구간[하한 이상, 상한 미만) → 점수 환산표, 체육교사 전용 설정)
+// 배점표 관리 (종목별 기록 구간 → 점수 환산표, 체육교사 전용 설정)
 // 종목마다 만점을 정해두고(전체 합이 1000점이 되도록), 배점표로 기록을
 // 점수로 환산한다. 배점표가 없는 종목은 총점 계산에서 제외된다.
-// 구간은 방향과 무관하게 항상 "하한 이상 ~ 상한 미만"이며, 최고 구간은 상한을
-// 비워두고(예: 300 이상) 최저 구간은 하한을 비워둘 수 있다(예: 200 미만).
+// 구간은 시트에는 항상 "하한(lower)/상한(upper)"으로 저장되지만, 판정 방식은 방향에
+// 따라 다르다 - HIGH(기록이 높을수록 좋음)는 "하한 이상 ~ 상한 미만", LOW(기록이
+// 낮을수록 좋음)는 "하한 초과 ~ 상한 이하"로 해석한다(physPrepCalcScore_ 참고).
 // ==========================================================
 function getPhysPrepScoreTable(eventId, token) {
   try {
@@ -303,15 +385,25 @@ function savePhysPrepScoreTable(eventId, rows, token) {
 }
 
 // 기록값 하나를 종목의 배점표(구간 목록)에 따라 점수로 환산한다. 배점표가 없으면 null(집계 제외).
-// 구간은 [하한 이상, 상한 미만)이며 방향과 무관하다 — 어느 구간에 높은 점수를 매길지는
+// 기록이 높을수록 좋은 종목(HIGH)은 [하한 이상, 상한 미만) 구간, 기록이 낮을수록 좋은
+// 종목(LOW)은 반대로 (하한 초과, 상한 이하] 구간으로 판정한다 — 둘 다 인접 구간끼리
+// 경계값을 하나씩만 공유하게 하기 위한 것으로, 어느 구간에 높은 점수를 매길지는
 // 배점표를 만드는 선생님이 정한다.
-function physPrepCalcScore_(ranges, value) {
+function physPrepCalcScore_(ranges, value, direction) {
   if (!ranges || ranges.length === 0) return null;
   let best = null;
   for (let i = 0; i < ranges.length; i++) {
     const r = ranges[i];
-    const lowOk = r.lower === '' || r.lower === null || r.lower === undefined || value >= parseFloat(r.lower);
-    const highOk = r.upper === '' || r.upper === null || r.upper === undefined || value < parseFloat(r.upper);
+    const hasLower = !(r.lower === '' || r.lower === null || r.lower === undefined);
+    const hasUpper = !(r.upper === '' || r.upper === null || r.upper === undefined);
+    let lowOk, highOk;
+    if (direction === 'LOW') {
+      lowOk = !hasLower || value > parseFloat(r.lower);
+      highOk = !hasUpper || value <= parseFloat(r.upper);
+    } else {
+      lowOk = !hasLower || value >= parseFloat(r.lower);
+      highOk = !hasUpper || value < parseFloat(r.upper);
+    }
     if (lowOk && highOk) { const sc = parseInt(r.score, 10) || 0; if (best === null || sc > best) best = sc; }
   }
   return best === null ? 0 : best; // 어떤 구간에도 해당하지 않으면 0점
@@ -322,6 +414,10 @@ function physPrepCalcScore_(ranges, value) {
 // 사용하므로, 이후 배점표를 수정하더라도 과거 회차에 이미 표시됐던 총점은 바뀌지
 // 않는다(회차별로 "OOO/만점점" 형태로 반환). 이 기능 도입 이전에 저장돼 스냅샷이
 // 없는 옛 기록만 예외적으로 현재 배점표를 이용해 한 번 보정 계산한다.
+// 종목이 그룹(예: "선택A" 중 2개 선택)에 속해 있으면, 회차별로 그 그룹 안에서
+// 점수가 높은 순으로 선택개수만큼만 골라 총점에 반영한다(현재 그룹 설정 기준 —
+// 과거 회차 저장 시점의 그룹 상태가 아니라 지금 설정을 그대로 적용한다). 그룹에
+// 속하지 않은 종목은 항상(그룹 크기 1) 포함된다.
 function getMyPhysPrepScoreSummary(token) {
   try {
     const session = requirePhysPrepAccess(token);
@@ -331,8 +427,12 @@ function getMyPhysPrepScoreSummary(token) {
     const eventsData = ss.getSheetByName('체대입시반_종목').getDataRange().getValues();
     const events = {};
     for (let i = 1; i < eventsData.length; i++) {
-      if (eventsData[i][0] && eventsData[i][4] === 'Y') events[eventsData[i][0]] = { direction: eventsData[i][3], maxScore: parseInt(eventsData[i][6], 10) || 0 };
+      if (eventsData[i][0] && eventsData[i][4] === 'Y') events[eventsData[i][0]] = { direction: eventsData[i][3], maxScore: parseInt(eventsData[i][6], 10) || 0, groupId: eventsData[i][7] || '' };
     }
+
+    const groupsData = ss.getSheetByName('체대입시반_그룹').getDataRange().getValues();
+    const groupPickCount = {};
+    for (let i = 1; i < groupsData.length; i++) { if (groupsData[i][0]) groupPickCount[groupsData[i][0]] = parseInt(groupsData[i][2], 10) || 1; }
 
     const tableData = ss.getSheetByName('체대입시반_배점표').getDataRange().getValues();
     const tablesByEvent = {};
@@ -356,18 +456,31 @@ function getMyPhysPrepScoreSummary(token) {
         maxForEvent = parseInt(storedMax, 10) || 0;
       } else {
         if (!tablesByEvent[eid]) continue;
-        const calc = physPrepCalcScore_(tablesByEvent[eid], parseFloat(row[6]));
+        const calc = physPrepCalcScore_(tablesByEvent[eid], parseFloat(row[6]), events[eid].direction);
         if (calc === null) continue;
         score = calc;
         maxForEvent = events[eid] ? events[eid].maxScore : 0;
       }
       const key = row[3] + '-' + row[4];
-      if (!byRound[key]) byRound[key] = { year: parseInt(row[3], 10), round: parseInt(row[4], 10), score: 0, maxTotal: 0 };
-      byRound[key].score += score;
-      byRound[key].maxTotal += maxForEvent;
+      if (!byRound[key]) byRound[key] = { year: parseInt(row[3], 10), round: parseInt(row[4], 10), entries: [] };
+      byRound[key].entries.push({ eid: eid, score: score, maxForEvent: maxForEvent });
     }
 
-    const trend = Object.values(byRound).sort((a, b) => (a.year * 100 + a.round) - (b.year * 100 + b.round));
+    const trend = Object.values(byRound).map(r => {
+      const byGroup = {};
+      r.entries.forEach(e => {
+        const gid = (events[e.eid] && events[e.eid].groupId) ? events[e.eid].groupId : ('__solo__' + e.eid);
+        if (!byGroup[gid]) byGroup[gid] = [];
+        byGroup[gid].push(e);
+      });
+      let score = 0, maxTotal = 0;
+      Object.keys(byGroup).forEach(gid => {
+        const list = byGroup[gid].slice().sort((a, b) => b.score - a.score);
+        const pick = groupPickCount[gid] || list.length; // 그룹 미배정(솔로)은 전부 포함
+        list.slice(0, pick).forEach(p => { score += p.score; maxTotal += p.maxForEvent; });
+      });
+      return { year: r.year, round: r.round, score: score, maxTotal: maxTotal };
+    }).sort((a, b) => (a.year * 100 + a.round) - (b.year * 100 + b.round));
     return { success: true, trend: trend };
   } catch (e) { return { success: false, message: e.message }; }
 }
@@ -419,7 +532,7 @@ function saveOfficialRecords(year, round, eventId, records, token) {
     records.forEach(r => {
       if (r.value === '' || r.value === null || r.value === undefined) return; // 빈 값은 건너뜀 (미측정)
       const grade = r.id.toString().charAt(0);
-      const calcScore = ranges.length > 0 ? physPrepCalcScore_(ranges, parseFloat(r.value)) : null;
+      const calcScore = ranges.length > 0 ? physPrepCalcScore_(ranges, parseFloat(r.value), eventMeta ? eventMeta.direction : 'HIGH') : null;
       const scoreSnapshot = calcScore === null ? '' : calcScore;
       const maxSnapshot = (calcScore === null || !eventMeta) ? '' : eventMeta.maxScore;
       const rowData = [r.id, r.name, grade, year, round, eventId, r.value, dateStr, session.name, scoreSnapshot, maxSnapshot];
