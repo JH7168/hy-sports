@@ -62,14 +62,29 @@
     });
   }
 
-  // 물품명별로 수량을 합산해 보여준다(장소 필터가 적용된 상태면 그 범위 안에서만 합산).
+  // 물품명별로 수량을 합산해 보여주고(장소 필터가 적용된 상태면 그 범위 안에서만 합산),
+  // 그 아래에 같은 물품명 안에서 내용(모델/브랜드 등)별로도 나눠서 보여준다.
   function renderInventorySummary(data) {
     const container = document.getElementById('inventory-summary-container');
     if(data.length === 0) { container.innerHTML = ''; return; }
     const totals = {};
-    data.forEach(item => { const key = (item.name || '').toString().trim() || '(이름없음)'; totals[key] = (totals[key] || 0) + (parseInt(item.qty) || 0); });
-    const chips = Object.keys(totals).sort().map(name => `<span style="background:#e8f5e9; border:1px solid #a5d6a7; border-radius:20px; padding:6px 14px; font-size:0.88em; white-space:nowrap;"><b style="color:#1b5e20;">${escapeHtml(name)}</b> ${totals[name]}개</span>`).join('');
-    container.innerHTML = `<div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;"><span style="font-size:0.85em; color:#666; font-weight:bold;">📊 물품명별 총 수량:</span>${chips}</div>`;
+    const byNameContent = {};
+    data.forEach(item => {
+      const name = (item.name || '').toString().trim() || '(이름없음)';
+      const qty = parseInt(item.qty) || 0;
+      totals[name] = (totals[name] || 0) + qty;
+      const content = (item.content || '').toString().trim() || '(내용없음)';
+      if (!byNameContent[name]) byNameContent[name] = {};
+      byNameContent[name][content] = (byNameContent[name][content] || 0) + qty;
+    });
+    const names = Object.keys(totals).sort();
+    const chips = names.map(name => `<span style="background:#e8f5e9; border:1px solid #a5d6a7; border-radius:20px; padding:6px 14px; font-size:0.88em; white-space:nowrap;"><b style="color:#1b5e20;">${escapeHtml(name)}</b> ${totals[name]}개</span>`).join('');
+    const contentLines = names.map(name => {
+      const contents = byNameContent[name];
+      const parts = Object.keys(contents).sort().map(c => `${escapeHtml(c)} ${contents[c]}개`).join(' · ');
+      return `<div style="padding:3px 0;"><b style="color:#1b5e20;">${escapeHtml(name)}</b> : ${parts}</div>`;
+    }).join('');
+    container.innerHTML = `<div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:8px;"><span style="font-size:0.85em; color:#666; font-weight:bold;">📊 물품명별 총 수량:</span>${chips}</div><div style="background:#f7faf7; border:1px solid #dcecdc; border-radius:8px; padding:10px 14px; font-size:0.85em; color:#444;"><div style="font-weight:bold; color:#666; margin-bottom:4px;">📋 내용별 수량</div>${contentLines}</div>`;
   }
 
   function renderInventoryRow(item) {
@@ -97,12 +112,52 @@
     });
   }
 
-  // 4. 물품 구입 단가 계산
+  // 4. 물품 구입 단가 계산 + 예산 항목을 골랐으면 반영 후 예상 잔액도 같이 보여준다.
   function calcReqTotal() {
     const qty = parseInt(document.getElementById('req-qty').value) || 0;
     const price = parseInt(document.getElementById('req-price').value) || 0;
     const totalInput = document.getElementById('req-total');
-    if (qty > 0 && price > 0) { totalInput.value = (qty * price).toLocaleString() + " 원"; } else { totalInput.value = ""; }
+    const total = (qty > 0 && price > 0) ? qty * price : 0;
+    totalInput.value = total > 0 ? total.toLocaleString() + " 원" : "";
+    updateBudgetPreview('req-budget', 'req-budget-preview', total);
+  }
+
+  // 예산 항목을 구입 신청 화면에 표시할 때는 세부항목이 아니라 산출내역명으로 구분한다
+  // (같은 세부항목 안에 여러 산출내역이 있으므로). 산출내역명이 길어서 줄임말로 보여준다 -
+  // 새 예산의 산출내역이 아래 표에 없으면 원래 이름을 그대로 쓴다.
+  const BUDGET_CALCBASIS_SHORT = {
+    '교과 스포츠 리그 운영': '스포츠 리그',
+    '체육관 관리비': '체육관 관리',
+    '학교운영자율경비 body lab 프로그램 기구용품 구입': '소모품',
+    '학교운영자율경비 body lab 인바디 구입': '인바디',
+    '학교운영자율경비 body lab프로그램 기구 구입': '비품',
+    '학교운영자율경비 body lab 프로그램 측정 기구 구입': '제자리멀리뛰기'
+  };
+  function budgetShortLabel(b) {
+    const calcBasis = (b && b.calcBasis || '').toString().trim();
+    if (!calcBasis) return '(산출내역없음)';
+    return BUDGET_CALCBASIS_SHORT[calcBasis] || calcBasis;
+  }
+
+  // selectId(예산 항목 선택창)에서 고른 예산의 현재 예산잔액에서 total을 뺀 예상 잔액을 보여준다.
+  function updateBudgetPreview(selectId, previewId, total) {
+    const sel = document.getElementById(selectId), previewEl = document.getElementById(previewId);
+    if (!sel || !previewEl) return;
+    const budgetId = sel.value;
+    if (!budgetId || total <= 0) { previewEl.innerHTML = ''; return; }
+    const b = cachedBudgetList.find(x => x.id === budgetId);
+    if (!b) { previewEl.innerHTML = ''; return; }
+    const after = (parseInt(b.remainingAmount) || 0) - total;
+    previewEl.innerHTML = `💡 [${escapeHtml(budgetShortLabel(b))}] 반영 시 예상 잔액: <span style="color:${after < 0 ? '#d32f2f' : '#1565c0'};">${after.toLocaleString()}원</span>${after < 0 ? ' (예산 초과!)' : ''}`;
+  }
+
+  // 예산 목록이 로드될 때(loadBudgetList)마다 같이 갱신되는 "사용할 예산 항목" 선택창.
+  function renderReqBudgetSelect() {
+    const sel = document.getElementById('req-budget');
+    if (!sel) return;
+    const prev = sel.value;
+    sel.innerHTML = '<option value="">사용할 예산 항목 선택(선택사항)</option>' + cachedBudgetList.map(b => `<option value="${b.id}">${escapeHtml(budgetShortLabel(b))} (잔액 ${parseInt(b.remainingAmount).toLocaleString()}원)</option>`).join('');
+    if (cachedBudgetList.some(b => b.id === prev)) sel.value = prev;
   }
 
   // 5. 물품 구입 신청 제출
@@ -112,10 +167,11 @@
     const qty = parseInt(document.getElementById('req-qty').value) || 0;
     const price = parseInt(document.getElementById('req-price').value) || 0;
     const teacher = document.getElementById('req-teacher').value;
+    const budgetId = document.getElementById('req-budget').value;
     if(!item || qty <= 0 || price <= 0 || !teacher) { showAlert("내용, 수량, 예상단가, 신청교사를 모두 정확히 입력해주세요."); return; }
 
     const btn = document.getElementById('btn-submit-req'); btn.disabled = true; btn.innerText = "서버 등록 중...";
-    const reqData = { item: item, spec: spec, qty: qty, price: price, total: (qty * price), teacher: teacher };
+    const reqData = { item: item, spec: spec, qty: qty, price: price, total: (qty * price), teacher: teacher, budgetId: budgetId };
 
     gsRun('savePurchaseRequest', reqData, currentUser.token).then(function(res) {
       btn.disabled = false; btn.innerText = "📝 구입 목록에 추가";
@@ -123,62 +179,158 @@
         document.getElementById('req-item').value = ''; document.getElementById('req-spec').value = '';
         document.getElementById('req-qty').value = ''; document.getElementById('req-price').value = '';
         document.getElementById('req-total').value = ''; document.getElementById('req-teacher').value = '';
+        document.getElementById('req-budget').value = ''; document.getElementById('req-budget-preview').innerHTML = '';
         showAlert("물품 구입 신청이 추가되었습니다."); loadPurchaseReqs();
       } else { showAlert(res.message); }
     }).catch(function() { btn.disabled = false; btn.innerText = "📝 구입 목록에 추가"; });
   }
 
-  // 6. 물품 구입 신청 리스트 불러오기
+  let cachedPurchaseReqs = [];
+
+  // 6. 물품 구입 신청 리스트 불러오기 - 예산 목록(물품구입신청과는 다른 시트)과 신청 내역을
+  // 순서대로 기다리지 않고 동시에 불러온 뒤("사용예산" 표시에 예산 목록이 필요하므로) 같이 그린다.
   function loadPurchaseReqs() {
     const tbody = document.getElementById('purchase-req-tbody');
-    tbody.innerHTML = '<tr><td colspan="7" style="padding:20px; color:#999;">신청 내역을 불러오는 중입니다...</td></tr>';
-    gsRun('getPurchaseRequests', currentUser.token).then(function(res) {
+    tbody.innerHTML = '<tr><td colspan="9" style="padding:20px; color:#999;">신청 내역을 불러오는 중입니다...</td></tr>';
+    Promise.all([loadBudgetList(), gsRun('getPurchaseRequests', currentUser.token)]).then(function(results) {
+      const res = results[1];
       document.getElementById('total-teacher-박정환').innerText = (res.totals['박정환'] || 0).toLocaleString() + "원";
       document.getElementById('total-teacher-문승연').innerText = (res.totals['문승연'] || 0).toLocaleString() + "원";
       document.getElementById('total-teacher-양서경').innerText = (res.totals['양서경'] || 0).toLocaleString() + "원";
 
+      cachedPurchaseReqs = res.list;
+      renderBudgetUsageSummary();
       tbody.innerHTML = '';
-      if(res.list.length === 0) { tbody.innerHTML = '<tr><td colspan="7" style="padding:20px; color:#999;">신청된 물품 내역이 없습니다.</td></tr>'; return; }
-      res.list.forEach(item => {
-        tbody.innerHTML += `<tr style="border-bottom:1px solid #eee;"><td style="padding:8px; color:#888;">${escapeHtml(item[0])}</td><td style="padding:8px; font-weight:bold;">${escapeHtml(item[1])}</td><td style="padding:8px; color:#555;">${escapeHtml(item[2])}</td><td style="padding:8px;">${escapeHtml(item[3])}</td><td style="padding:8px;">${parseInt(item[4]).toLocaleString()}</td><td style="padding:8px; font-weight:bold; color:#d32f2f;">${parseInt(item[5]).toLocaleString()}원</td><td style="padding:8px; font-weight:bold; color:#1e3c72;">${escapeHtml(item[6])}</td></tr>`;
-      });
+      if(res.list.length === 0) { tbody.innerHTML = '<tr><td colspan="9" style="padding:20px; color:#999;">신청된 물품 내역이 없습니다.</td></tr>'; return; }
+      res.list.forEach(item => { tbody.innerHTML += renderPurchaseReqRow(item); });
     });
-    loadBudgetList();
+  }
+
+  // 소모품/비품 예산 항목별로, 신청 목록에 그 예산을 사용하기로 한 건들의 예상금액을 모두 더해
+  // 예산잔액에서 뺀 "사용 예정 반영 후 잔액"을 보여준다(음수면 빨간 마이너스로 표시). 두 항목을
+  // 합친 합계도 같이 보여준다.
+  function renderBudgetUsageSummary() {
+    const container = document.getElementById('budget-usage-summary');
+    if (!container) return;
+    const categories = ['소모품', '비품'];
+    const results = categories.map(label => {
+      const budgetItems = cachedBudgetList.filter(b => budgetShortLabel(b) === label);
+      const budgetIds = budgetItems.map(b => b.id);
+      const balance = budgetItems.reduce((s, b) => s + (parseInt(b.remainingAmount) || 0), 0);
+      const used = cachedPurchaseReqs.filter(r => budgetIds.indexOf(r.budgetId) > -1).reduce((s, r) => s + (parseInt(r.total) || 0), 0);
+      return { label: label, balance: balance, used: used, remaining: balance - used };
+    });
+    const totalRemaining = results.reduce((s, r) => s + r.remaining, 0);
+
+    const chip = (label, r) => `<div style="background:white; padding:10px 16px; border-radius:10px; box-shadow:0 2px 5px rgba(0,0,0,0.05); min-width:170px;"><div style="font-size:0.85em; color:#666; font-weight:bold; margin-bottom:4px;">${escapeHtml(label)}</div><div style="font-size:1.15em; font-weight:bold; color:${r.remaining < 0 ? '#d32f2f' : '#1b5e20'};">${r.remaining.toLocaleString()}원</div></div>`;
+
+    container.innerHTML = `<div style="font-weight:bold; color:#0d47a1; margin-bottom:10px;">📊 체육수업 소모품 비품 사용 예정 반영 후 잔액</div><div style="display:flex; gap:12px; flex-wrap:wrap;">${
+      chip(results[0].label, results[0]) + chip(results[1].label, results[1]) + chip('합계', { remaining: totalRemaining })
+    }</div>`;
+  }
+
+  function renderPurchaseReqRow(item) {
+    const b = item.budgetId ? cachedBudgetList.find(x => x.id === item.budgetId) : null;
+    return `<tr id="req-row-${item.rowIndex}" style="border-bottom:1px solid #eee;"><td style="padding:8px; color:#888;">${escapeHtml(item.seq)}</td><td style="padding:8px; font-weight:bold;">${escapeHtml(item.item)}</td><td style="padding:8px; color:#555;">${escapeHtml(item.spec)}</td><td style="padding:8px;">${escapeHtml(item.qty)}</td><td style="padding:8px;">${parseInt(item.price).toLocaleString()}</td><td style="padding:8px; font-weight:bold; color:#d32f2f;">${parseInt(item.total).toLocaleString()}원</td><td style="padding:8px; font-weight:bold; color:#1e3c72;">${escapeHtml(item.teacher)}</td><td style="padding:8px; color:#1565c0;">${b ? escapeHtml(budgetShortLabel(b)) : '-'}</td><td style="padding:8px;"><button class="btn-small" style="background:#607d8b; padding:6px 12px; font-size:0.85em;" onclick="startEditPurchaseRow(${item.rowIndex})">수정</button></td></tr>`;
+  }
+
+  // 구입 신청 내역을 해당 행에서 바로 수정 (인벤토리 항목 수정과 같은 방식)
+  function startEditPurchaseRow(rowIndex) {
+    const item = cachedPurchaseReqs.find(i => i.rowIndex === rowIndex);
+    if(!item) return;
+    const row = document.getElementById('req-row-' + rowIndex);
+    if(!row) return;
+    const teacherOptions = ['박정환', '문승연', '양서경'].map(t => `<option value="${t}" ${t === item.teacher ? 'selected' : ''}>${t}</option>`).join('');
+    const budgetOptions = '<option value="">없음</option>' + cachedBudgetList.map(b => `<option value="${b.id}" ${b.id === item.budgetId ? 'selected' : ''}>${escapeHtml(budgetShortLabel(b))}</option>`).join('');
+    row.innerHTML = `<td style="padding:6px; color:#888;">${escapeHtml(item.seq)}</td><td style="padding:6px;"><input type="text" id="edit-req-item-${rowIndex}" class="input-field" value="${escapeHtml(item.item)}" style="margin:0; padding:8px; font-size:0.9em;"></td><td style="padding:6px;"><input type="text" id="edit-req-spec-${rowIndex}" class="input-field" value="${escapeHtml(item.spec)}" style="margin:0; padding:8px; font-size:0.9em;"></td><td style="padding:6px;"><input type="number" id="edit-req-qty-${rowIndex}" class="input-field" value="${escapeHtml(item.qty)}" style="margin:0; padding:8px; font-size:0.9em;"></td><td style="padding:6px;"><input type="number" id="edit-req-price-${rowIndex}" class="input-field" value="${escapeHtml(item.price)}" style="margin:0; padding:8px; font-size:0.9em;"></td><td style="padding:6px; color:#999; font-size:0.85em;">자동계산</td><td style="padding:6px;"><select id="edit-req-teacher-${rowIndex}" class="input-field" style="margin:0; padding:8px; font-size:0.9em;">${teacherOptions}</select></td><td style="padding:6px;"><select id="edit-req-budget-${rowIndex}" class="input-field" style="margin:0; padding:8px; font-size:0.85em;">${budgetOptions}</select></td><td style="padding:6px; white-space:nowrap;"><button class="btn-small" style="background:#4caf50; padding:6px 10px; font-size:0.85em;" onclick="saveEditPurchaseRow(${rowIndex})">저장</button> <button class="btn-small" style="background:#999; padding:6px 10px; font-size:0.85em;" onclick="loadPurchaseReqs()">취소</button></td>`;
+  }
+
+  function saveEditPurchaseRow(rowIndex) {
+    const item = document.getElementById('edit-req-item-' + rowIndex).value.trim();
+    const spec = document.getElementById('edit-req-spec-' + rowIndex).value.trim();
+    const qty = document.getElementById('edit-req-qty-' + rowIndex).value;
+    const price = document.getElementById('edit-req-price-' + rowIndex).value;
+    const teacher = document.getElementById('edit-req-teacher-' + rowIndex).value;
+    const budgetId = document.getElementById('edit-req-budget-' + rowIndex).value;
+    if(!item || !qty || !price) { showAlert("내용, 수량, 예상단가를 모두 입력하세요."); return; }
+    gsRun('updatePurchaseRequest', rowIndex, item, spec, qty, price, teacher, budgetId, currentUser.token).then(function(res) {
+      if(res.success) loadPurchaseReqs(); else showAlert(res.message);
+    });
   }
 
   // -------------------------------------------------------------------------
   // 7. 예산 관리 - 조회는 체육교사 전체, 등록/삭제는 박정환 선생님 전용
+  // 서버(getBudgetList)에서 세부항목순 → 원가통계비목순으로 이미 정렬해서 주므로, 같은
+  // 값이 연속되면 rowspan으로 셀을 병합해 한 번만 표시한다(엑셀 병합 표와 같은 느낌).
   // -------------------------------------------------------------------------
+  let cachedBudgetList = [];
+
   function loadBudgetList() {
     const container = document.getElementById('budget-summary-list');
     container.innerHTML = '<div style="color:#999; text-align:center; padding:10px;">불러오는 중입니다...</div>';
-    gsRun('getBudgetList', currentUser.token).then(function(res) {
+    return gsRun('getBudgetList', currentUser.token).then(function(res) {
       const regBtn = document.getElementById('btn-budget-register');
       if (res.isManager) regBtn.classList.remove('hidden'); else regBtn.classList.add('hidden');
 
       if (!res.success) { container.innerHTML = `<div style="color:red; text-align:center; padding:10px;">${escapeHtml(res.message)}</div>`; return; }
-      if (res.list.length === 0) { container.innerHTML = '<div style="color:#999; text-align:center; padding:10px;">등록된 예산이 없습니다.</div>'; return; }
+      const list = res.list;
+      cachedBudgetList = list;
+      renderReqBudgetSelect();
+      if (list.length === 0) { container.innerHTML = '<div style="color:#999; text-align:center; padding:10px;">등록된 예산이 없습니다.</div>'; return; }
 
-      let html = `<table style="width:100%; border-collapse:collapse; text-align:center; font-size:0.9em;"><thead><tr style="background:#c8e6c9; border-bottom:2px solid #a5d6a7;"><th style="padding:8px;">예산 종류</th><th style="padding:8px;">편성금액</th><th style="padding:8px;">사용금액</th><th style="padding:8px;">잔액</th>${res.isManager ? '<th style="padding:8px;">관리</th>' : ''}</tr></thead><tbody>`;
-      res.list.forEach(b => {
-        html += `<tr style="border-bottom:1px solid #e0e0e0;"><td style="padding:8px; font-weight:bold;">${escapeHtml(b.type)}</td><td style="padding:8px;">${parseInt(b.allocated).toLocaleString()}원</td><td style="padding:8px;">${parseInt(b.used).toLocaleString()}원</td><td style="padding:8px; font-weight:bold; color:#1b5e20;">${parseInt(b.balance).toLocaleString()}원</td>${res.isManager ? `<td style="padding:8px;"><button class="btn-small" style="background:#999; padding:5px 10px; font-size:0.85em;" onclick="removeBudgetItemNow('${escapeHtml(b.id)}')">삭제</button></td>` : ''}</tr>`;
+      // detailSpan[i] > 0 이면 i행에서 세부항목 셀을 그 값만큼 rowspan해서 그리고, -1이면
+      // 바로 위쪽 병합 셀에 포함된 행이라 세부항목 칸 자체를 그리지 않는다(costSpan도 동일한
+      // 방식이되, 세부항목이 바뀌는 지점에서는 항상 새 그룹으로 끊어 병합이 섞이지 않게 한다).
+      const detailSpan = new Array(list.length).fill(0);
+      const costSpan = new Array(list.length).fill(0);
+      for (let i = 0; i < list.length; i++) {
+        const sameDetailAsPrev = i > 0 && list[i].detail === list[i - 1].detail;
+        if (sameDetailAsPrev) { detailSpan[i] = -1; }
+        else { let span = 1; while (i + span < list.length && list[i + span].detail === list[i].detail) span++; detailSpan[i] = span; }
+
+        const sameCostAsPrev = sameDetailAsPrev && list[i].costCategory === list[i - 1].costCategory;
+        if (sameCostAsPrev) { costSpan[i] = -1; }
+        else { let span = 1; while (i + span < list.length && list[i + span].detail === list[i].detail && list[i + span].costCategory === list[i].costCategory) span++; costSpan[i] = span; }
+      }
+
+      let html = `<table style="width:100%; border-collapse:collapse; text-align:center; font-size:0.9em;"><thead><tr style="background:#c8e6c9; border-bottom:2px solid #a5d6a7;"><th style="padding:8px;">세부항목</th><th style="padding:8px;">원가통계비목</th><th style="padding:8px;">산출내역</th><th style="padding:8px;">예산현액</th><th style="padding:8px;">예산잔액</th>${res.isManager ? '<th style="padding:8px;">관리</th>' : ''}</tr></thead><tbody>`;
+      list.forEach((b, i) => {
+        html += `<tr style="border-bottom:1px solid #e0e0e0; ${detailSpan[i] > 0 ? 'border-top:2px solid #a5d6a7;' : ''}">`;
+        if (detailSpan[i] > 0) html += `<td rowspan="${detailSpan[i]}" style="padding:8px; font-weight:bold; vertical-align:middle;">${escapeHtml(b.detail)}</td>`;
+        if (costSpan[i] > 0) html += `<td rowspan="${costSpan[i]}" style="padding:8px; vertical-align:middle;">${escapeHtml(b.costCategory)}</td>`;
+        const calcBasisText = res.isManager ? b.calcBasis : budgetShortLabel(b);
+        html += `<td style="padding:8px; color:#555;">${escapeHtml(calcBasisText)}</td><td style="padding:8px;">${parseInt(b.currentAmount).toLocaleString()}원</td><td style="padding:8px; font-weight:bold; color:#1b5e20;">${parseInt(b.remainingAmount).toLocaleString()}원</td>${res.isManager ? `<td style="padding:8px; white-space:nowrap;"><button class="btn-small" style="background:#607d8b; padding:5px 10px; font-size:0.85em; margin-bottom:4px;" onclick="openBudgetEditModal('${escapeHtml(b.id)}')">수정</button> <button class="btn-small" style="background:#999; padding:5px 10px; font-size:0.85em;" onclick="removeBudgetItemNow('${escapeHtml(b.id)}')">삭제</button></td>` : ''}</tr>`;
       });
       html += '</tbody></table>';
       container.innerHTML = html;
     });
   }
 
-  function calcBudgetBalance() {
-    const allocated = parseInt(document.getElementById('budget-allocated-input').value) || 0;
-    const used = parseInt(document.getElementById('budget-used-input').value) || 0;
-    document.getElementById('budget-balance-input').value = (allocated - used).toLocaleString() + "원";
+  function openBudgetModal() {
+    document.getElementById('budget-edit-id').value = '';
+    document.getElementById('budget-modal-title').innerText = '💰 예산 등록';
+    document.getElementById('btn-budget-submit').innerText = '등록';
+    document.getElementById('budget-detail-input').value = '';
+    document.getElementById('budget-costcategory-input').value = '';
+    document.getElementById('budget-calcbasis-input').value = '';
+    document.getElementById('budget-current-input').value = '';
+    document.getElementById('budget-remaining-input').value = '';
+    document.getElementById('budgetModal').classList.remove('hidden');
   }
 
-  function openBudgetModal() {
-    document.getElementById('budget-type-input').value = '';
-    document.getElementById('budget-allocated-input').value = '';
-    document.getElementById('budget-used-input').value = '';
-    document.getElementById('budget-balance-input').value = '';
+  // 박정환 선생님만 볼 수 있는 "수정" 버튼에서 호출된다 - 같은 모달을 재사용하되 기존 값을
+  // 채워넣고 저장 시 등록이 아니라 수정 API를 타도록 edit-id를 채워둔다.
+  function openBudgetEditModal(budgetId) {
+    const b = cachedBudgetList.find(x => x.id === budgetId);
+    if (!b) return;
+    document.getElementById('budget-edit-id').value = budgetId;
+    document.getElementById('budget-modal-title').innerText = '✏️ 예산 수정';
+    document.getElementById('btn-budget-submit').innerText = '저장';
+    document.getElementById('budget-detail-input').value = b.detail;
+    document.getElementById('budget-costcategory-input').value = b.costCategory;
+    document.getElementById('budget-calcbasis-input').value = b.calcBasis;
+    document.getElementById('budget-current-input').value = b.currentAmount;
+    document.getElementById('budget-remaining-input').value = b.remainingAmount;
     document.getElementById('budgetModal').classList.remove('hidden');
   }
 
@@ -187,16 +339,22 @@
   }
 
   function submitBudgetItem() {
-    const type = document.getElementById('budget-type-input').value.trim();
-    const allocated = document.getElementById('budget-allocated-input').value;
-    const used = document.getElementById('budget-used-input').value;
-    if (!type || allocated === '') { showAlert('예산 종류와 편성금액을 입력하세요.'); return; }
-    const btn = document.getElementById('btn-budget-submit'); btn.disabled = true; btn.innerText = '등록 중...';
-    gsRun('saveBudgetItem', type, allocated, used || 0, currentUser.token).then(function(res) {
-      btn.disabled = false; btn.innerText = '등록';
+    const editId = document.getElementById('budget-edit-id').value;
+    const detail = document.getElementById('budget-detail-input').value.trim();
+    const costCategory = document.getElementById('budget-costcategory-input').value.trim();
+    const calcBasis = document.getElementById('budget-calcbasis-input').value.trim();
+    const currentAmount = document.getElementById('budget-current-input').value;
+    const remainingAmount = document.getElementById('budget-remaining-input').value;
+    if (!detail) { showAlert('세부항목을 입력하세요.'); return; }
+    const btn = document.getElementById('btn-budget-submit'); const originalText = btn.innerText; btn.disabled = true; btn.innerText = editId ? '저장 중...' : '등록 중...';
+    const call = editId
+      ? gsRun('updateBudgetItem', editId, detail, costCategory, calcBasis, currentAmount || 0, remainingAmount || 0, currentUser.token)
+      : gsRun('saveBudgetItem', detail, costCategory, calcBasis, currentAmount || 0, remainingAmount || 0, currentUser.token);
+    call.then(function(res) {
+      btn.disabled = false; btn.innerText = originalText;
       showAlert(res.message);
       if (res.success) { closeBudgetModal(); loadBudgetList(); }
-    }).catch(function() { btn.disabled = false; btn.innerText = '등록'; });
+    }).catch(function() { btn.disabled = false; btn.innerText = originalText; });
   }
 
   function removeBudgetItemNow(budgetId) {

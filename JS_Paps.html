@@ -103,13 +103,23 @@
 
   function changeAdminYear() { loadAdminGradeStats(); }
 
+  // getAdminPapsOverview 하나로 통계(학년별 평균)와 TOP5 랭킹을 한 번의 서버 호출에서 같이
+  // 받아온다 - 둘 다 같은 PAPS_상세_<year> 시트를 읽어야 해서, 예전처럼 별도 호출 두 번으로
+  // 나누면 그 큰 시트를 매번 두 번씩 통째로 읽는 셈이라 그만큼 느려진다.
   function loadAdminGradeStats() {
     const tbody = document.getElementById('admin-grade-stats-tbody'), year = document.getElementById('admin-year-select') ? document.getElementById('admin-year-select').value : CURRENT_ACADEMIC_YEAR;
     if(!tbody) return;
     tbody.innerHTML = `<tr><td colspan="4" style="padding:30px; color:#999;">${year}학년도 데이터를 분석하는 중입니다...</td></tr>`; document.getElementById('health-class-stats-container').innerHTML = "";
     document.getElementById('paps-ranking-container').innerHTML = `<div style="text-align:center; color:#999; padding:20px;">순위를 분석하는 중입니다...</div>`;
-    gsRun('getAdminGradeStats', year, currentUser.token).then(function(res) { if(res.success) { cachedGradeStats = res.data; renderAdminGradeTable(); } else { tbody.innerHTML = `<tr><td colspan="4" style="color:red; padding:15px;">❌ 통계 로드 실패: ${escapeHtml(res.message)}</td></tr>`; } });
-    gsRun('getPapsTopRankings', year, currentUser.token).then(function(res) { if(res.success) { cachedPapsRankings = res.data; renderPapsRankings(); } else { document.getElementById('paps-ranking-container').innerHTML = `<div style="color:red; padding:15px;">❌ 순위 로드 실패: ${escapeHtml(res.message)}</div>`; } });
+    gsRun('getAdminPapsOverview', year, currentUser.token).then(function(res) {
+      if(res.success) {
+        cachedGradeStats = res.stats; renderAdminGradeTable();
+        cachedPapsRankings = res.rankings; renderPapsRankings();
+      } else {
+        tbody.innerHTML = `<tr><td colspan="4" style="color:red; padding:15px;">❌ 통계 로드 실패: ${escapeHtml(res.message)}</td></tr>`;
+        document.getElementById('paps-ranking-container').innerHTML = `<div style="color:red; padding:15px;">❌ 순위 로드 실패: ${escapeHtml(res.message)}</div>`;
+      }
+    });
   }
 
   function changeAdminGradeTab(grade) {

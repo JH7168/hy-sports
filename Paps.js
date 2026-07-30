@@ -42,7 +42,7 @@ function clearPapsPdfByClass(grade, cls, token) {
   } catch(e) { return { success: false, message: "삭제 중 오류 발생: " + e.message }; }
 }
 
-function getAdminGradeStats(year, token) {
+function getAdminPapsOverview(year, token) {
   try {
     requirePeTeacher(token);
     if (!year) year = getCurrentAcademicYear();
@@ -56,6 +56,7 @@ function getAdminGradeStats(year, token) {
       "2": { count: 0, grade1: 0, grade2: 0, grade3: 0, grade4: 0, grade5: 0, totalScore: 0, totalGrade: 0, cardioRec: 0, cardioScore: 0, cardioGrade: 0, flexRec: 0, flexScore: 0, flexGrade: 0, strengthRec: 0, strengthScore: 0, strengthGrade: 0, powerRec: 0, powerScore: 0, powerGrade: 0, bmiRec: 0, bmiScore: 0, bmiGrade: 0 },
       "3": { count: 0, grade1: 0, grade2: 0, grade3: 0, grade4: 0, grade5: 0, totalScore: 0, totalGrade: 0, cardioRec: 0, cardioScore: 0, cardioGrade: 0, flexRec: 0, flexScore: 0, flexGrade: 0, strengthRec: 0, strengthScore: 0, strengthGrade: 0, powerRec: 0, powerScore: 0, powerGrade: 0, bmiRec: 0, bmiScore: 0, bmiGrade: 0 }
     };
+    const byGrade = { "1": [], "2": [], "3": [] };
 
     for (let i = 1; i < data.length; i++) {
       const row = data[i]; if (!row[0]) continue;
@@ -78,45 +79,7 @@ function getAdminGradeStats(year, token) {
       stats[grade].strengthRec += parseNum(row[10]); stats[grade].strengthScore += parseNum(row[11]); stats[grade].strengthGrade += parseNum(row[12]);
       stats[grade].powerRec += parseNum(row[13]); stats[grade].powerScore += parseNum(row[14]); stats[grade].powerGrade += parseNum(row[15]);
       stats[grade].bmiRec += parseNum(row[16]); stats[grade].bmiScore += parseNum(row[17]); stats[grade].bmiGrade += parseNum(row[18]);
-    }
 
-    let result = {};
-    for (let g in stats) {
-      let cnt = stats[g].count || 1;
-      let targetCnt = stats[g].grade4 + stats[g].grade5;
-      result[g] = {
-        totalStudents: stats[g].count, grade1: stats[g].grade1, grade2: stats[g].grade2, grade3: stats[g].grade3, grade4: stats[g].grade4, grade5: stats[g].grade5,
-        targetCount: targetCnt, targetRatio: stats[g].count > 0 ? ((targetCnt / stats[g].count) * 100).toFixed(1) : 0,
-        totalScore: (stats[g].totalScore / cnt).toFixed(1), totalGrade: (stats[g].totalGrade / cnt).toFixed(1),
-        cardio: { rec: (stats[g].cardioRec / cnt).toFixed(1), score: (stats[g].cardioScore / cnt).toFixed(1), grade: (stats[g].cardioGrade / cnt).toFixed(1) },
-        flex: { rec: (stats[g].flexRec / cnt).toFixed(1), score: (stats[g].flexScore / cnt).toFixed(1), grade: (stats[g].flexGrade / cnt).toFixed(1) },
-        strength: { rec: (stats[g].strengthRec / cnt).toFixed(1), score: (stats[g].strengthScore / cnt).toFixed(1), grade: (stats[g].strengthGrade / cnt).toFixed(1) },
-        power: { rec: (stats[g].powerRec / cnt).toFixed(1), score: (stats[g].powerScore / cnt).toFixed(1), grade: (stats[g].powerGrade / cnt).toFixed(1) },
-        bmi: { rec: (stats[g].bmiRec / cnt).toFixed(1), score: (stats[g].bmiScore / cnt).toFixed(1), grade: (stats[g].bmiGrade / cnt).toFixed(1) }
-      };
-    }
-    return { success: true, data: result };
-  } catch (e) { return { success: false, message: e.message }; }
-}
-
-// 학년별 종합점수 TOP5 + 종목별(심폐지구력/유연성/근력/순발력) 점수 TOP5를 계산한다.
-// BMI는 "높은 게 좋다"고 말하기 애매한 지표라 랭킹 대상에서 제외한다. 종목별 순위는
-// 원기록이 아니라 이미 방향까지 반영해 계산된 점수(0~20점) 기준으로 매기되, 점수가
-// 같으면 원기록이 더 높은 쪽을 우선한다.
-function getPapsTopRankings(year, token) {
-  try {
-    requirePeTeacher(token);
-    if (!year) year = getCurrentAcademicYear();
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const sheet = ss.getSheetByName('PAPS_상세_' + year);
-    if (!sheet) return { success: false, message: `${year}학년도 데이터가 없습니다.` };
-
-    const data = sheet.getDataRange().getValues();
-    const byGrade = { "1": [], "2": [], "3": [] };
-    for (let i = 1; i < data.length; i++) {
-      const row = data[i]; if (!row[0]) continue;
-      const grade = row[0].toString().trim().charAt(0);
-      if (!byGrade[grade]) continue;
       byGrade[grade].push({
         name: row[1] ? row[1].toString().trim() : '',
         totalScore: parseNum(row[2]),
@@ -127,6 +90,25 @@ function getPapsTopRankings(year, token) {
       });
     }
 
+    let statsResult = {};
+    for (let g in stats) {
+      let cnt = stats[g].count || 1;
+      let targetCnt = stats[g].grade4 + stats[g].grade5;
+      statsResult[g] = {
+        totalStudents: stats[g].count, grade1: stats[g].grade1, grade2: stats[g].grade2, grade3: stats[g].grade3, grade4: stats[g].grade4, grade5: stats[g].grade5,
+        targetCount: targetCnt, targetRatio: stats[g].count > 0 ? ((targetCnt / stats[g].count) * 100).toFixed(1) : 0,
+        totalScore: (stats[g].totalScore / cnt).toFixed(1), totalGrade: (stats[g].totalGrade / cnt).toFixed(1),
+        cardio: { rec: (stats[g].cardioRec / cnt).toFixed(1), score: (stats[g].cardioScore / cnt).toFixed(1), grade: (stats[g].cardioGrade / cnt).toFixed(1) },
+        flex: { rec: (stats[g].flexRec / cnt).toFixed(1), score: (stats[g].flexScore / cnt).toFixed(1), grade: (stats[g].flexGrade / cnt).toFixed(1) },
+        strength: { rec: (stats[g].strengthRec / cnt).toFixed(1), score: (stats[g].strengthScore / cnt).toFixed(1), grade: (stats[g].strengthGrade / cnt).toFixed(1) },
+        power: { rec: (stats[g].powerRec / cnt).toFixed(1), score: (stats[g].powerScore / cnt).toFixed(1), grade: (stats[g].powerGrade / cnt).toFixed(1) },
+        bmi: { rec: (stats[g].bmiRec / cnt).toFixed(1), score: (stats[g].bmiScore / cnt).toFixed(1), grade: (stats[g].bmiGrade / cnt).toFixed(1) }
+      };
+    }
+    // 학년별 종합점수 TOP5 + 종목별(심폐지구력/유연성/근력/순발력) 점수 TOP5. BMI는 "높은 게
+    // 좋다"고 말하기 애매한 지표라 랭킹 대상에서 제외한다. 종목별 순위는 원기록이 아니라 이미
+    // 방향까지 반영해 계산된 점수(0~20점) 기준으로 매기되, 점수가 같으면 원기록이 더 높은
+    // 쪽을 우선한다. byGrade는 위 통계 집계와 같은 순회에서 이미 모아뒀다(시트를 다시 읽지 않음).
     function top5(rows, scoreKey, recKey) {
       return rows.slice().sort((a, b) => {
         if (b[scoreKey] !== a[scoreKey]) return b[scoreKey] - a[scoreKey];
@@ -134,10 +116,10 @@ function getPapsTopRankings(year, token) {
       }).slice(0, 5).map((r, idx) => ({ rank: idx + 1, name: r.name, record: recKey ? r[recKey] : null, score: r[scoreKey] }));
     }
 
-    const result = {};
+    let rankingsResult = {};
     for (const g in byGrade) {
       const rows = byGrade[g];
-      result[g] = {
+      rankingsResult[g] = {
         total: top5(rows, 'totalScore', null),
         cardio: top5(rows, 'cardioScore', 'cardioRec'),
         flex: top5(rows, 'flexScore', 'flexRec'),
@@ -145,7 +127,7 @@ function getPapsTopRankings(year, token) {
         power: top5(rows, 'powerScore', 'powerRec')
       };
     }
-    return { success: true, data: result };
+    return { success: true, stats: statsResult, rankings: rankingsResult };
   } catch (e) { return { success: false, message: e.message }; }
 }
 

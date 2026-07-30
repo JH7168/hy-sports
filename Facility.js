@@ -119,11 +119,12 @@ function isFacilityTeamComplete_(applicationId, memberRows) {
 }
 
 // 실제 추첨 로직(조건 확인 없이 무조건 수행). 전원 확정된 팀만 후보로 삼는다.
-function performFacilityDraw_(facility, slotId, slotRowIndex, teamCount) {
+// preloaded가 있으면(getAllFacilitySlots_에서 여러 슬롯을 한 번에 훑을 때) 팀신청/팀원 시트를
+// 다시 읽지 않고 그걸 재사용한다 - 없으면(단일 슬롯 호출) 예전처럼 그때그때 새로 읽는다.
+function performFacilityDraw_(facility, slotId, slotRowIndex, teamCount, preloaded) {
   const appSheet = getFacilityAppSheet_(facility);
-  const appData = appSheet.getDataRange().getValues();
-  const memberData = getFacilityMemberSheet_(facility).getDataRange().getValues();
-  const memberRows = memberData.slice(1);
+  const appData = (preloaded && preloaded.appData) || appSheet.getDataRange().getValues();
+  const memberRows = (preloaded && preloaded.memberRows) || getFacilityMemberSheet_(facility).getDataRange().getValues().slice(1);
 
   const applicants = [];
   for (let i = 1; i < appData.length; i++) {
@@ -144,10 +145,10 @@ function performFacilityDraw_(facility, slotId, slotRowIndex, teamCount) {
   return selectedIds;
 }
 
-function ensureFacilityDrawn_(facility, slotObj) {
+function ensureFacilityDrawn_(facility, slotObj, preloaded) {
   if (slotObj.status !== 'OPEN') return slotObj;
   if (new Date() < new Date(slotObj.announceAt)) return slotObj;
-  const selectedIds = performFacilityDraw_(facility, slotObj.id, slotObj.rowIndex, slotObj.teamCount);
+  const selectedIds = performFacilityDraw_(facility, slotObj.id, slotObj.rowIndex, slotObj.teamCount, preloaded);
   slotObj.status = 'DRAWN';
   slotObj.resultJson = JSON.stringify(selectedIds);
   return slotObj;
@@ -156,9 +157,20 @@ function ensureFacilityDrawn_(facility, slotObj) {
 function getAllFacilitySlots_(facility) {
   const data = getFacilitySlotSheet_(facility).getDataRange().getValues();
   const list = [];
+  // 발표시각이 지난 OPEN 슬롯이 여러 개 겹쳐 있으면(주말 동안 아무도 접속하지 않아 한꺼번에
+  // 밀린 경우 등) 슬롯마다 추첨할 때 팀신청/팀원 시트를 매번 다시 읽으면 그만큼 느려지므로,
+  // 이번 조회에서 처음 추첨이 필요해지는 순간 딱 한 번만 두 시트를 읽어 재사용한다.
+  let preloaded = null;
   for (let i = 1; i < data.length; i++) {
     if (!data[i][0]) continue;
-    list.push(ensureFacilityDrawn_(facility, facilitySlotRowToObj_(data[i], i + 1)));
+    const slotObj = facilitySlotRowToObj_(data[i], i + 1);
+    if (!preloaded && slotObj.status === 'OPEN' && new Date() >= new Date(slotObj.announceAt)) {
+      preloaded = {
+        appData: getFacilityAppSheet_(facility).getDataRange().getValues(),
+        memberRows: getFacilityMemberSheet_(facility).getDataRange().getValues().slice(1)
+      };
+    }
+    list.push(ensureFacilityDrawn_(facility, slotObj, preloaded));
   }
   return list;
 }

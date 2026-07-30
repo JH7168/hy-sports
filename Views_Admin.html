@@ -153,28 +153,36 @@
            <div style="background:white; padding:8px 15px; border-radius:20px; font-size:0.9em; box-shadow:0 2px 5px rgba(0,0,0,0.05);">양서경: <span id="total-teacher-양서경" style="font-weight:bold; color:#d32f2f;">0원</span></div>
         </div>
 
-        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap:10px; margin-bottom:15px; background:#f0f2f5; padding:15px; border-radius:8px;">
-           <input type="text" id="req-item" class="input-field" placeholder="내용(품명)" style="margin:0;">
-           <input type="text" id="req-spec" class="input-field" placeholder="규격" style="margin:0;">
-           <input type="number" id="req-qty" class="input-field" placeholder="수량" oninput="calcReqTotal()" style="margin:0;">
-           <input type="number" id="req-price" class="input-field" placeholder="예상단가(원)" oninput="calcReqTotal()" style="margin:0;">
-           <input type="text" id="req-total" class="input-field" placeholder="예상금액(자동)" readonly style="margin:0; background:#e8f0fe; color:#1e3c72; font-weight:bold; text-align:right;">
-           <select id="req-teacher" class="input-field" style="margin:0;">
-             <option value="">신청교사 선택</option><option value="박정환">박정환</option><option value="문승연">문승연</option><option value="양서경">양서경</option>
+        <div style="margin-bottom:5px; background:#f0f2f5; padding:15px; border-radius:8px;">
+           <div style="display:flex; flex-wrap:nowrap; gap:10px; overflow-x:auto; padding-bottom:4px;">
+             <input type="text" id="req-item" class="input-field" placeholder="내용(품명)" style="margin:0; flex:1; min-width:110px;">
+             <input type="text" id="req-spec" class="input-field" placeholder="규격" style="margin:0; flex:1; min-width:90px;">
+             <input type="number" id="req-qty" class="input-field" placeholder="수량" oninput="calcReqTotal()" style="margin:0; flex:1; min-width:80px;">
+             <input type="number" id="req-price" class="input-field" placeholder="예상단가(원)" oninput="calcReqTotal()" style="margin:0; flex:1; min-width:110px;">
+             <input type="text" id="req-total" class="input-field" placeholder="예상금액(자동)" readonly style="margin:0; flex:1; min-width:120px; background:#e8f0fe; color:#1e3c72; font-weight:bold; text-align:right;">
+             <select id="req-teacher" class="input-field" style="margin:0; flex:1; min-width:130px;">
+               <option value="">신청교사 선택</option><option value="박정환">박정환</option><option value="문승연">문승연</option><option value="양서경">양서경</option>
+             </select>
+           </div>
+           <select id="req-budget" class="input-field" onchange="calcReqTotal()" style="margin:10px 0 0; width:100%;">
+             <option value="">사용할 예산 항목 선택(선택사항)</option>
            </select>
-           <button class="btn-primary" id="btn-submit-req" onclick="submitPurchaseReq()" style="margin:0; padding:10px; grid-column: 1 / -1; background:#2196f3;">📝 구입 목록에 추가</button>
+           <div id="req-budget-preview" style="font-size:0.9em; color:#1565c0; font-weight:bold; min-height:1.2em; margin-top:6px;"></div>
+           <button class="btn-primary" id="btn-submit-req" onclick="submitPurchaseReq()" style="margin-top:10px; padding:10px; width:100%; background:#2196f3;">📝 구입 목록에 추가</button>
         </div>
 
         <div style="overflow-x:auto;">
           <table style="width:100%; border-collapse:collapse; text-align:center; font-size:0.9em;" id="purchase-table">
             <thead>
               <tr style="background:#e3f2fd; border-bottom:2px solid #ccc; color:#0d47a1;">
-                <th style="padding:10px;">순번</th><th style="padding:10px;">내용</th><th style="padding:10px;">규격</th><th style="padding:10px;">수량</th><th style="padding:10px;">예상단가</th><th style="padding:10px;">예상금액</th><th style="padding:10px;">신청교사</th>
+                <th style="padding:10px;">순번</th><th style="padding:10px;">내용</th><th style="padding:10px;">규격</th><th style="padding:10px;">수량</th><th style="padding:10px;">예상단가</th><th style="padding:10px;">예상금액</th><th style="padding:10px;">신청교사</th><th style="padding:10px;">사용예산</th><th style="padding:10px;">관리</th>
               </tr>
             </thead>
-            <tbody id="purchase-req-tbody"><tr><td colspan="7" style="padding:20px; color:#999;">데이터를 불러오는 중입니다...</td></tr></tbody>
+            <tbody id="purchase-req-tbody"><tr><td colspan="9" style="padding:20px; color:#999;">데이터를 불러오는 중입니다...</td></tr></tbody>
           </table>
         </div>
+
+        <div id="budget-usage-summary" style="margin-top:20px; background:#e3f2fd; padding:15px; border-radius:8px;"></div>
       </div>
     </div>
 
@@ -521,14 +529,16 @@
 <div id="budgetModal" class="custom-modal-overlay hidden">
   <div class="custom-modal-box wide-left">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-      <h3 style="margin:0; color:#0d47a1;">💰 예산 등록</h3>
+      <h3 style="margin:0; color:#0d47a1;" id="budget-modal-title">💰 예산 등록</h3>
       <button onclick="closeBudgetModal()" style="border:none; background:none; font-size:1.4em; line-height:1; cursor:pointer; color:#999; padding:0;">✕</button>
     </div>
+    <input type="hidden" id="budget-edit-id">
     <div style="display:flex; flex-direction:column; gap:10px;">
-      <input type="text" id="budget-type-input" class="input-field" placeholder="예산 종류 (예: 체육용품비)" style="margin:0;">
-      <input type="number" id="budget-allocated-input" class="input-field" placeholder="편성금액(원)" style="margin:0;" oninput="calcBudgetBalance()">
-      <input type="number" id="budget-used-input" class="input-field" placeholder="사용금액(원)" style="margin:0;" oninput="calcBudgetBalance()">
-      <input type="text" id="budget-balance-input" class="input-field" placeholder="잔액(자동)" readonly style="margin:0; background:#e8f0fe; color:#1e3c72; font-weight:bold;">
+      <input type="text" id="budget-detail-input" class="input-field" placeholder="세부항목 (예: 체육용품비)" style="margin:0;">
+      <input type="text" id="budget-costcategory-input" class="input-field" placeholder="원가통계비목" style="margin:0;">
+      <input type="text" id="budget-calcbasis-input" class="input-field" placeholder="산출내역" style="margin:0;">
+      <input type="number" id="budget-current-input" class="input-field" placeholder="예산현액(원)" style="margin:0;">
+      <input type="number" id="budget-remaining-input" class="input-field" placeholder="예산잔액(원)" style="margin:0;">
     </div>
     <button class="btn-primary" id="btn-budget-submit" onclick="submitBudgetItem()" style="background:#1e3c72; margin-top:16px;">등록</button>
   </div>

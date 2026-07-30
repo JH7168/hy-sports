@@ -10,7 +10,7 @@ function include(filename) { return HtmlService.createTemplateFromFile(filename)
 // 한 번만 맞춰두면 되므로 스크립트 속성에 완료 버전을 기록해두고 그 이후로는 건너뛴다.
 // 이후 시트/컬럼 구조를 바꾸는 코드를 추가할 때는 이 버전 숫자를 올려야 기존
 // 스프레드시트에도 그 변경(마이그레이션)이 한 번 더 반영된다.
-const SETUP_VERSION = '3';
+const SETUP_VERSION = '5';
 
 function ensureSystemSheetsSetup_() {
   const props = PropertiesService.getScriptProperties();
@@ -83,19 +83,39 @@ function setupSystemSheets() {
   }
 
   // 물품구입신청 시트 세팅
+  const purchaseHeaders = ['순번', '내용', '규격', '수량', '예상단가', '예상금액', '신청교사', '신청일시', '예산ID'];
   let purchaseSheet = ss.getSheetByName('물품구입신청');
   if (!purchaseSheet) {
     purchaseSheet = ss.insertSheet('물품구입신청');
-    purchaseSheet.appendRow(['순번', '내용', '규격', '수량', '예상단가', '예상금액', '신청교사', '신청일시']);
-    purchaseSheet.getRange("A1:H1").setBackground("#2196f3").setFontColor("white").setFontWeight("bold");
+    purchaseSheet.getRange(1, 1, 1, purchaseHeaders.length).setValues([purchaseHeaders]);
+    purchaseSheet.getRange(1, 1, 1, purchaseHeaders.length).setBackground("#2196f3").setFontColor("white").setFontWeight("bold");
+  } else if (purchaseSheet.getRange(1, 9).getValue() !== '예산ID') {
+    // 이 신청이 어느 예산 항목에서 지출되는지 연결해 반영 후 예상 잔액을 보여주기 위한 컬럼.
+    purchaseSheet.getRange(1, 1, 1, purchaseHeaders.length).setValues([purchaseHeaders]);
+    purchaseSheet.getRange(1, 1, 1, purchaseHeaders.length).setBackground("#2196f3").setFontColor("white").setFontWeight("bold");
   }
 
   // 예산관리 시트 세팅 (박정환 선생님만 등록/삭제 가능)
+  const budgetHeaders = ['예산ID', '세부항목', '원가통계비목', '산출내역', '예산현액', '예산잔액', '등록일시', '등록자'];
   let budgetSheet = ss.getSheetByName('예산관리');
   if (!budgetSheet) {
     budgetSheet = ss.insertSheet('예산관리');
-    budgetSheet.appendRow(['예산ID', '예산종류', '편성금액', '사용금액', '잔액', '등록일시', '등록자']);
-    budgetSheet.getRange("A1:G1").setBackground("#1e3c72").setFontColor("white").setFontWeight("bold");
+    budgetSheet.getRange(1, 1, 1, budgetHeaders.length).setValues([budgetHeaders]);
+    budgetSheet.getRange(1, 1, 1, budgetHeaders.length).setBackground("#1e3c72").setFontColor("white").setFontWeight("bold");
+  } else if (budgetSheet.getRange(1, 2).getValue() !== '세부항목') {
+    // 예전에는 예산종류/편성금액/사용금액/잔액 형식이었다. 세부항목=예산종류, 예산현액=편성금액,
+    // 예산잔액=잔액으로 옮기고(사용금액 개념은 새 형식에 없어 버린다), 원가통계비목·산출내역은
+    // 기존에 없던 항목이라 빈칸으로 시작한다.
+    const oldData = budgetSheet.getDataRange().getValues();
+    const migrated = [budgetHeaders];
+    for (let i = 1; i < oldData.length; i++) {
+      const row = oldData[i];
+      if (!row[0]) continue;
+      migrated.push([row[0], row[1], '', '', row[2], row[4], row[5], row[6]]);
+    }
+    budgetSheet.clear();
+    budgetSheet.getRange(1, 1, migrated.length, budgetHeaders.length).setValues(migrated);
+    budgetSheet.getRange(1, 1, 1, budgetHeaders.length).setBackground("#1e3c72").setFontColor("white").setFontWeight("bold");
   }
 
   // 소규모수업 - 체대입시반 시트 세팅

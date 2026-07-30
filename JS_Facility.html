@@ -464,9 +464,10 @@
     const container = document.getElementById(`${p}-student-container`);
     container.innerHTML = `<div class="card" style="text-align:center; color:#999;">불러오는 중입니다...</div>`;
     if (facility === 'GYM') {
-      gsRun('getGymWeekdaySchedule', currentUser.token).then(function(schedRes) {
-        gymScheduleCache = schedRes.success ? schedRes.schedule : {};
-        gsRun('getFacilityBoard', facility, currentUser.token).then(function(res) { renderFacilityStudentView(facility, res); });
+      // 요일별 배정표와 게시판은 서로 다른 시트를 읽는 별개 요청이라 순서대로 기다릴 필요가 없다.
+      Promise.all([gsRun('getGymWeekdaySchedule', currentUser.token), gsRun('getFacilityBoard', facility, currentUser.token)]).then(function(results) {
+        gymScheduleCache = results[0].success ? results[0].schedule : {};
+        renderFacilityStudentView(facility, results[1]);
       });
     } else {
       gsRun('getFacilityBoard', facility, currentUser.token).then(function(res) { renderFacilityStudentView(facility, res); });

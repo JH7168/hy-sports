@@ -100,15 +100,22 @@
     });
   }
 
+  // getPhysPrepEvents/getMyPhysPrepRecords/getMyPhysPrepScoreSummary는 서로 다른 결과를
+  // 참조하지 않으므로(각자 필요한 시트를 독립적으로 읽음) 순서대로 기다리지 않고 한 번에
+  // 요청해서 응답이 모두 도착하면 그때 같이 그린다 - 매번 순차 대기하면 그만큼 느려진다.
   function loadPhysPrepStudentView() {
     const container = document.getElementById('physprep-student-container');
     container.innerHTML = `<div class="card" style="text-align:center; color:#999;">불러오는 중입니다...</div>`;
-    gsRun('getPhysPrepEvents', currentUser.token).then(function(evRes) {
+    const isStudent = currentUser.role === '학생';
+    Promise.all([
+      gsRun('getPhysPrepEvents', currentUser.token),
+      isStudent ? gsRun('getMyPhysPrepRecords', currentUser.token) : Promise.resolve(null),
+      isStudent ? gsRun('getMyPhysPrepScoreSummary', currentUser.token) : Promise.resolve(null)
+    ]).then(function(results) {
+      const evRes = results[0];
       physPrepEventsCache = evRes.success ? evRes.list.filter(e => e.active) : [];
-      if (currentUser.role === '학생') {
-        Promise.all([gsRun('getMyPhysPrepRecords', currentUser.token), gsRun('getMyPhysPrepScoreSummary', currentUser.token)]).then(function(results) {
-          renderPhysPrepStudentView(results[0], results[1]);
-        });
+      if (isStudent) {
+        renderPhysPrepStudentView(results[1], results[2]);
       } else {
         renderPhysPrepStudentView({ success: false, message: '체대입시반 명단에 등록된 학생만 개인 기록·자율입력을 이용할 수 있습니다. 아래에서 랭킹은 조회할 수 있습니다.' }, null);
       }
@@ -368,13 +375,6 @@
   // -------------------------------------------------------------------------
   // 관리자 - 종목 그룹 관리 (그룹 안에서 상위 N개만 총점에 반영)
   // -------------------------------------------------------------------------
-  function loadPhysPrepGroupsAdmin() {
-    return gsRun('getPhysPrepGroups', currentUser.token).then(function(res) {
-      physPrepGroupsCache = res.success ? res.list : [];
-      renderPhysPrepGroupsTable();
-      renderPhysPrepEventGroupSelect();
-    });
-  }
 
   function renderPhysPrepGroupsTable() {
     const tbody = document.getElementById('physprep-groups-tbody');
@@ -444,19 +444,25 @@
   // -------------------------------------------------------------------------
   // 관리자 - 종목 관리
   // -------------------------------------------------------------------------
+  // getPhysPrepGroups와 getPhysPrepEvents는 서로 다른 시트를 독립적으로 읽으므로(그룹 목록은
+  // 종목 응답을 참조하지 않음), 순서대로 기다리지 않고 동시에 요청한 뒤 둘 다 도착하면 그린다.
   function loadPhysPrepEventsAdmin() {
     const tbody = document.getElementById('physprep-events-tbody');
     tbody.innerHTML = `<tr><td colspan="6" style="padding:20px; color:#999;">불러오는 중입니다...</td></tr>`;
-    loadPhysPrepGroupsAdmin().then(function() {
-      gsRun('getPhysPrepEvents', currentUser.token).then(function(res) {
-        physPrepEventsCache = res.success ? res.list : [];
-        renderPhysPrepGroupsTable(); // 그룹별 소속 종목 개수 표시를 최신 종목 목록 기준으로 갱신
-        if (physPrepEventsCache.length === 0) { tbody.innerHTML = `<tr><td colspan="6" style="padding:20px; color:#999;">등록된 종목이 없습니다. 위에서 새 종목을 등록하세요.</td></tr>`; return; }
-        const maxSum = physPrepEventsCache.reduce((s, e) => s + (e.maxScore || 0), 0);
-        tbody.innerHTML = '';
-        physPrepEventsCache.forEach(e => { tbody.innerHTML += physPrepEventRowHtml_(e); });
-        tbody.innerHTML += `<tr><td colspan="6" style="padding:8px; color:#888; font-size:0.85em;">종목 만점 합계: <b style="color:${maxSum === 1000 ? '#2e7d32' : '#e65100'};">${maxSum}점</b> (1000점이 되도록 배분하는 것을 권장합니다)</td></tr>`;
-      });
+    Promise.all([
+      gsRun('getPhysPrepGroups', currentUser.token),
+      gsRun('getPhysPrepEvents', currentUser.token)
+    ]).then(function(results) {
+      const groupRes = results[0], eventRes = results[1];
+      physPrepGroupsCache = groupRes.success ? groupRes.list : [];
+      physPrepEventsCache = eventRes.success ? eventRes.list : [];
+      renderPhysPrepGroupsTable();
+      renderPhysPrepEventGroupSelect();
+      if (physPrepEventsCache.length === 0) { tbody.innerHTML = `<tr><td colspan="6" style="padding:20px; color:#999;">등록된 종목이 없습니다. 위에서 새 종목을 등록하세요.</td></tr>`; return; }
+      const maxSum = physPrepEventsCache.reduce((s, e) => s + (e.maxScore || 0), 0);
+      tbody.innerHTML = '';
+      physPrepEventsCache.forEach(e => { tbody.innerHTML += physPrepEventRowHtml_(e); });
+      tbody.innerHTML += `<tr><td colspan="6" style="padding:8px; color:#888; font-size:0.85em;">종목 만점 합계: <b style="color:${maxSum === 1000 ? '#2e7d32' : '#e65100'};">${maxSum}점</b> (1000점이 되도록 배분하는 것을 권장합니다)</td></tr>`;
     });
   }
 
